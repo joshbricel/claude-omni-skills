@@ -1,0 +1,13 @@
+# Claude Code local settings (contains secrets)
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+
+# Generated output files
+skills/omni-semantic-layer-setup/scripts/validate_queries.sql
+skills/omni-semantic-layer-setup/scripts/sample_queries.sql
+
+# OS
+.DS_Store
