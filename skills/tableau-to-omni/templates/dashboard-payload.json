@@ -1,0 +1,283 @@
+{
+  "baseModelId": "REPLACE_WITH_MODEL_ID",
+  "exportVersion": "0.1",
+  "fileUploads": {},
+  "queryModels": {},
+  "dashboard": {
+    "crossfilterEnabled": false,
+    "facetFilters": false,
+    "name": "REPLACE_WITH_DASHBOARD_NAME",
+    "metadata": {
+      "layouts": {
+        "lg": [
+          {"i": "1", "x": 0, "y": 0, "w": 12, "h": 15},
+          {"i": "2", "x": 0, "y": 15, "w": 6, "h": 42},
+          {"i": "3", "x": 6, "y": 15, "w": 6, "h": 42}
+        ]
+      },
+      "textTiles": [],
+      "hiddenTiles": [],
+      "tileSettings": {},
+      "tileFilterMap": {},
+      "tileControlMap": {}
+    },
+    "metadataVersion": 2,
+    "queryPresentationCollection": {
+      "filterConfig": {},
+      "filterConfigVersion": 0,
+      "filterOrder": [],
+      "queryPresentationCollectionMemberships": [
+        {
+          "queryPresentation": {
+            "type": "query",
+            "name": "TILE_1_NAME",
+            "subTitle": "",
+            "description": "",
+            "prefersChart": false,
+            "automaticVis": true,
+            "topicName": "REPLACE_WITH_TOPIC",
+            "isSql": false,
+            "filterOrder": [],
+            "resultConfig": {
+              "tableType": "spreadsheet",
+              "rowBanding": {"enabled": false, "bandSize": 1},
+              "expandedRows": {},
+              "columnFormats": {},
+              "hideIndexColumn": false,
+              "truncateHeaders": true,
+              "showDescriptions": true,
+              "visColumnDisplay": "hide-view-name"
+            },
+            "aiConfig": {},
+            "query": {
+              "queryJson": {
+                "limit": 500,
+                "sorts": [],
+                "table": "REPLACE_WITH_VIEW",
+                "fields": [],
+                "pivots": [],
+                "dbtMode": false,
+                "filters": {},
+                "version": 8,
+                "metadata": {},
+                "rewriteSql": true,
+                "row_totals": {},
+                "fill_fields": [],
+                "calculations": [],
+                "column_limit": 50,
+                "join_via_map": {},
+                "column_totals": {},
+                "userEditedSQL": "",
+                "dimensionIndex": 0,
+                "default_group_by": true,
+                "custom_summary_types": {},
+                "join_paths_from_topic_name": "REPLACE_WITH_TOPIC"
+              }
+            },
+            "visConfig": {
+              "visType": "omni-spreadsheet",
+              "spec": {},
+              "fields": [],
+              "version": 0
+            }
+          }
+        },
+        {
+          "queryPresentation": {
+            "type": "query",
+            "name": "TILE_2_NAME",
+            "subTitle": "",
+            "description": "",
+            "prefersChart": true,
+            "automaticVis": true,
+            "topicName": "REPLACE_WITH_TOPIC",
+            "isSql": false,
+            "filterOrder": [],
+            "resultConfig": {
+              "tableType": "spreadsheet",
+              "rowBanding": {"enabled": false, "bandSize": 1},
+              "expandedRows": {},
+              "columnFormats": {},
+              "hideIndexColumn": false,
+              "truncateHeaders": true,
+              "showDescriptions": true,
+              "visColumnDisplay": "hide-view-name"
+            },
+            "aiConfig": {},
+            "query": {
+              "queryJson": {
+                "limit": 500,
+                "sorts": [],
+                "table": "REPLACE_WITH_VIEW",
+                "fields": [],
+                "pivots": [],
+                "dbtMode": false,
+                "filters": {},
+                "version": 8,
+                "metadata": {},
+                "rewriteSql": true,
+                "row_totals": {},
+                "fill_fields": [],
+                "calculations": [],
+                "column_limit": 50,
+                "join_via_map": {},
+                "column_totals": {},
+                "userEditedSQL": "",
+                "dimensionIndex": 0,
+                "default_group_by": true,
+                "custom_summary_types": {},
+                "join_paths_from_topic_name": "REPLACE_WITH_TOPIC"
+              }
+            },
+            "visConfig": {
+              "visType": "basic",
+              "spec": {
+                "version": 0,
+                "configType": "cartesian",
+                "mark": {"type": "line"},
+                "x": {
+                  "field": {"name": "REPLACE_WITH_DATE_FIELD"},
+                  "axis": {
+                    "title": {"value": ""},
+                    "sort": {
+                      "field": "REPLACE_WITH_DATE_FIELD",
+                      "order": "ascending"
+                    }
+                  }
+                },
+                "y": {
+                  "field": {"name": "REPLACE_WITH_MEASURE_FIELD"},
+                  "axis": {"title": {"value": "TILE_2_NAME"}}
+                },
+                "series": [
+                  {
+                    "mark": {"type": "line", "_mark_color": "#298BE5"},
+                    "field": {"name": "REPLACE_WITH_MEASURE_FIELD"},
+                    "title": {"value": "TILE_2_NAME", "format": "USDCURRENCY"},
+                    "yAxis": "y"
+                  }
+                ],
+                "tooltip": [
+                  {"field": {"name": "REPLACE_WITH_DATE_FIELD"}},
+                  {"field": {"name": "REPLACE_WITH_MEASURE_FIELD"}}
+                ],
+                "behaviors": {"stackMultiMark": false},
+                "_dependentAxis": "y"
+              },
+              "fields": [],
+              "version": 0
+            }
+          }
+        },
+        {
+          "queryPresentation": {
+            "type": "query",
+            "name": "TILE_3_NAME",
+            "subTitle": "",
+            "description": "",
+            "prefersChart": true,
+            "automaticVis": true,
+            "topicName": "REPLACE_WITH_TOPIC",
+            "isSql": false,
+            "filterOrder": [],
+            "resultConfig": {
+              "tableType": "spreadsheet",
+              "rowBanding": {"enabled": false, "bandSize": 1},
+              "expandedRows": {},
+              "columnFormats": {},
+              "hideIndexColumn": false,
+              "truncateHeaders": true,
+              "showDescriptions": true,
+              "visColumnDisplay": "hide-view-name"
+            },
+            "aiConfig": {},
+            "query": {
+              "queryJson": {
+                "limit": 500,
+                "sorts": [],
+                "table": "REPLACE_WITH_VIEW",
+                "fields": [],
+                "pivots": [],
+                "dbtMode": false,
+                "filters": {},
+                "version": 8,
+                "metadata": {},
+                "rewriteSql": true,
+                "row_totals": {},
+                "fill_fields": [],
+                "calculations": [],
+                "column_limit": 50,
+                "join_via_map": {},
+                "column_totals": {},
+                "userEditedSQL": "",
+                "dimensionIndex": 0,
+                "default_group_by": true,
+                "custom_summary_types": {},
+                "join_paths_from_topic_name": "REPLACE_WITH_TOPIC"
+              }
+            },
+            "visConfig": {
+              "visType": "basic",
+              "spec": {
+                "version": 0,
+                "configType": "cartesian",
+                "mark": {"type": "line"},
+                "x": {
+                  "field": {"name": "REPLACE_WITH_DATE_FIELD"},
+                  "axis": {
+                    "title": {"value": ""},
+                    "sort": {
+                      "field": "REPLACE_WITH_DATE_FIELD",
+                      "order": "ascending"
+                    }
+                  }
+                },
+                "y": {
+                  "field": {"name": "REPLACE_WITH_MEASURE_FIELD"},
+                  "axis": {"title": {"value": "TILE_3_NAME"}}
+                },
+                "series": [
+                  {
+                    "mark": {"type": "line", "_mark_color": "#4A90D9"},
+                    "field": {"name": "REPLACE_WITH_MEASURE_FIELD"},
+                    "title": {"value": "TILE_3_NAME", "format": "USDCURRENCY"},
+                    "yAxis": "y"
+                  }
+                ],
+                "tooltip": [
+                  {"field": {"name": "REPLACE_WITH_DATE_FIELD"}},
+                  {"field": {"name": "REPLACE_WITH_MEASURE_FIELD"}}
+                ],
+                "behaviors": {"stackMultiMark": false},
+                "_dependentAxis": "y"
+              },
+              "fields": [],
+              "version": 0
+            }
+          }
+        }
+      ]
+    }
+  },
+  "document": {
+    "connectionId": "REPLACE_WITH_CONNECTION_ID",
+    "name": "REPLACE_WITH_DASHBOARD_NAME",
+    "description": "",
+    "scope": "organization",
+    "type": "document"
+  },
+  "workbookModel": {
+    "connection_id": "REPLACE_WITH_CONNECTION_ID",
+    "views": [],
+    "relationships": [],
+    "model_kind": "WORKBOOK",
+    "base_model_id": "REPLACE_WITH_MODEL_ID",
+    "topics": [],
+    "ignored_schemas": [],
+    "ignored_views": [],
+    "all_schema_names": [],
+    "virtualized_schemas": [],
+    "deleted_topics": [],
+    "dbt_virtualization_enabled": true
+  }
+}
