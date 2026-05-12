@@ -1,0 +1,3303 @@
+version: "1.0"
+generated_from: tableau-omni-mapping-rules.md
+source_spec_files:
+  twbx: tableau-twbx-format-spec.md
+  omni: omni-cli-format-spec.md
+  audit: tableau-omni-parity-audit.md
+
+# === User guardrails (mirrors the YAML block at the top of the markdown) ===
+# 22 guardrails. Keys are stable IDs the rules engine looks up.
+guardrails:
+
+  lod_placement:
+    default: model_layer
+    options: [model_layer, workbook_layer, snowflake_view]
+    affects_rules: [R-CALC-04, R-CALC-05, R-CALC-06]
+    description: "Where Tableau LOD expressions land in the Omni stack. model_layer = Omni derived_table or measure SQL."
+
+  calculated_field_placement:
+    default: model_layer
+    options: [model_layer, workbook_layer]
+    affects_rules: [R-CALC-01, R-CALC-02, R-CALC-03]
+    description: "Where ordinary calc fields land. model_layer keeps reuse high; workbook_layer is single-tile only."
+
+  table_calc_placement:
+    default: omni_table_calc
+    options: [omni_table_calc, snowflake_window, workbook_layer]
+    affects_rules: [R-CALC-07, R-CALC-08, R-CALC-09, R-CALC-10, R-CALC-11, R-CALC-12]
+    description: "omni_table_calc when Omni supports the calc natively, snowflake_window otherwise."
+
+  dual_axis_strategy:
+    default: vega_lite_layered
+    options: [vega_lite_layered, two_tiles_stacked, reject]
+    affects_rules: [R-VIZ-10, R-VIZ-11]
+    description: "Tableau dual-axis behavior. Vega-Lite handles synced and independent; two_tiles loses overlap."
+
+  floating_zone_handling:
+    default: snap_to_grid
+    options: [snap_to_grid, reject_with_warning, best_effort_layered]
+    affects_rules: [R-DASH-02, R-DASH-03]
+    description: "Tableau floating layout has no Omni equivalent; choose how to land it."
+
+  multi_tab_handling:
+    default: separate_dashboards
+    options: [separate_dashboards, single_dashboard_with_anchor, wait_for_omni_tabs]
+    affects_rules: [R-DASH-09, R-DASH-10]
+    description: "Tableau stories or multi-sheet dashboards. separate_dashboards is the safest until Omni tabs are stable."
+
+  parameter_handling:
+    default: omni_control
+    options: [omni_control, snowflake_session_var, reject]
+    affects_rules: [R-PARAM-01, R-PARAM-02, R-PARAM-03, R-PARAM-04]
+    description: "Tableau parameters. omni_control = templated filter + dashboard control."
+
+  set_handling:
+    default: dimension_flag
+    options: [dimension_flag, filter_preset, reject]
+    affects_rules: [R-DERIVED-01, R-DERIVED-02, R-DERIVED-03]
+    description: "Tableau sets. dimension_flag = CASE WHEN boolean dimension."
+
+  group_handling:
+    default: case_when_dimension
+    options: [case_when_dimension, alias_only, reject]
+    affects_rules: [R-DERIVED-04]
+    description: "Tableau groups (categorical-bin)."
+
+  bin_handling:
+    default: omni_bin
+    options: [omni_bin, case_when_dimension]
+    affects_rules: [R-DERIVED-05]
+    description: "Numeric bin: arithmetic FLOOR vs CASE ranges. omni_bin emits FLOOR."
+
+  hierarchy_handling:
+    default: omni_drill_fields
+    options: [omni_drill_fields, flatten, reject]
+    affects_rules: [R-DERIVED-06]
+    description: "Tableau drill-paths."
+
+  custom_palette_handling:
+    default: emit_brand_theme
+    options: [emit_brand_theme, inline_per_tile, reject]
+    affects_rules: [R-COLOR-01, R-COLOR-02, R-COLOR-03]
+    description: "emit_brand_theme writes one palette in model AI settings, then references per tile."
+
+  tooltip_handling:
+    default: omni_tooltip
+    options: [omni_tooltip, drop_with_warning]
+    affects_rules: [R-VIZ-20, R-FORMAT-08]
+    description: "Tableau tooltip text with field tokens."
+
+  forecast_cluster_handling:
+    default: drop_with_warning
+    options: [precompute_snowflake, drop_with_warning, reject]
+    affects_rules: [R-VIZ-15, R-VIZ-16, R-CALC-13]
+    description: "Tableau forecast / cluster analytics objects. Precompute is heavy; drop is honest."
+
+  set_action_handling:
+    default: drop_with_warning
+    options: [drop_with_warning, reject_workbook]
+    affects_rules: [R-ACTION-06]
+    description: "Tableau set actions have no Omni equivalent."
+
+  highlight_action_handling:
+    default: drop_with_warning
+    options: [drop_with_warning, crossfilter_substitute]
+    affects_rules: [R-ACTION-02]
+    description: "Tableau highlight actions."
+
+  format_string_dialect:
+    default: best_effort
+    options: [omni_native, passthrough_excel, best_effort]
+    affects_rules: [R-FORMAT-01, R-FORMAT-02, R-FORMAT-03]
+    description: "best_effort uses Omni named formats when available, falls back to Excel-style strings."
+
+  null_handling:
+    default: preserve
+    options: [preserve, replace_with_zero, drop]
+    affects_rules: [R-FIELD-04]
+    description: "Default null treatment for numeric measures."
+
+  default_aggregation_strategy:
+    default: respect_tableau
+    options: [respect_tableau, force_explicit_in_omni]
+    affects_rules: [R-FIELD-02, R-FIELD-03]
+    description: "respect_tableau copies the TWBX default-aggregation enum onto the Omni measure."
+
+  view_naming_convention:
+    default: root_path_no_schema_prefix
+    options: [root_path_no_schema_prefix, schema_prefixed, both]
+    affects_rules: [R-CONN-01, R-MODEL-01]
+    description: "PUBLIC views go at views/<view>.view; non-PUBLIC get schema__view filename."
+
+  topic_naming_convention:
+    default: snake_case_clean
+    options: [from_tableau_datasource_caption, snake_case_clean, manual]
+    affects_rules: [R-MODEL-05]
+    description: "How to name the Omni topic. snake_case_clean strips Tableau adornments."
+
+  fidelity_threshold_for_rejection:
+    default: 0.6
+    options: "float 0.0 - 1.0"
+    affects_rules: [ALL]
+    description: "Per-tile fidelity score. Below this the emitter raises instead of emitting low-quality output."
+
+# === Mapping rules ===
+# 129 rules across 14 families.
+rules:
+
+  # === R-CONN: Connections and datasources (8 rules) ===
+
+  - id: R-CONN-01
+    family: R-CONN
+    name: "Live SQL connection"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.2"
+      xml_element: "connection"
+      xml_predicate: "@class, @dbname, @schema, @server, @warehouse attributes"
+    omni_target:
+      spec_section: "Omni §1.1, §2"
+      file_pattern: "views/*.view"
+      yaml_path: "schema, sql_table_name"
+    default_mapping:
+      strategy: model_layer_dimension
+      summary: "Emit one view file per Tableau column group. dbname.schema.table reconstructs sql_table_name. Omni connection must exist on target instance by name; emitter validates via omni connections list."
+      example: |
+        view: orders
+        schema: PUBLIC
+        sql_table_name: ANALYTICS.PUBLIC.ORDERS
+    guardrails_consumed: [view_naming_convention]
+    failure_mode: manual_review
+    verification: "omni connections list shows the target connection; row count of view matches Tableau extract row count."
+    notes: "Failure mode is connection not found on target Omni instance; emit error, list candidate connections, halt."
+
+  - id: R-CONN-02
+    family: R-CONN
+    name: "Embedded Hyper extract"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §1.3, §3.12, §10"
+      xml_element: "extract"
+      xml_predicate: "@enabled='true' plus Data/*.hyper file in TWBX zip"
+    omni_target:
+      spec_section: "Omni §2"
+      file_pattern: "n/a"
+      yaml_path: "none native"
+    default_mapping:
+      strategy: precompute_upstream
+      summary: "Re-point to the live underlying connection. If unknown or inaccessible, materialize the .hyper as a warehouse table upstream and target that table."
+      example: |
+        # No Omni native target. Re-point to the live source,
+        # or materialize the .hyper upstream then apply R-CONN-01.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Row count of resulting Omni view matches hyper extract."
+    notes: "If underlying connection unrecoverable, emit warning, include hyper extraction script in migration report."
+
+  - id: R-CONN-03
+    family: R-CONN
+    name: "Legacy TDE extract"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §1.1"
+      xml_element: ".tde file"
+      xml_predicate: "file extension .tde"
+    omni_target:
+      spec_section: "Omni §2"
+      file_pattern: "n/a"
+      yaml_path: "none native"
+    default_mapping:
+      strategy: precompute_upstream
+      summary: "Upgrade .tde to .hyper using Tableau tdsutil before migration, then apply R-CONN-02."
+      example: |
+        # Step 1: tdsutil upgrade datasource.tde -> datasource.hyper
+        # Step 2: apply R-CONN-02 (embedded hyper extract).
+    guardrails_consumed: []
+    failure_mode: reject
+    verification: "Hyper file produced before migration proceeds."
+    notes: ".tde upgrade failure halts with explicit message naming the workbook."
+
+  - id: R-CONN-04
+    family: R-CONN
+    name: "Federated multi-connection"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.2"
+      xml_element: "datasource"
+      xml_predicate: "multiple connection siblings under one datasource"
+    omni_target:
+      spec_section: "Omni §2, §4"
+      file_pattern: "topics/*.topic"
+      yaml_path: "one topic per connection"
+    default_mapping:
+      strategy: manual_review
+      summary: "Emit one Omni topic per connection plus a warning recommending an upstream join view. Do not attempt cross-connection join in Omni."
+      example: |
+        # topic_a.topic -> connection A
+        # topic_b.topic -> connection B
+        # Recommend upstream UNION view in warehouse.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Each topic queries independently; cross-connection worksheets land in the warnings report."
+    notes: "Cross-connection joins in worksheets demote to R-CONN-05."
+
+  - id: R-CONN-05
+    family: R-CONN
+    name: "Cross-database join (federated 10.0+)"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §1.5, §3.2"
+      xml_element: "relation"
+      xml_predicate: "@type='join' across connections"
+    omni_target:
+      spec_section: "Omni §4, §5"
+      file_pattern: "n/a"
+      yaml_path: "none (single-connection only)"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Emit a warning naming the source connections and the join predicate. Suggest: pre-join in warehouse and re-point Omni at the joined table. Do not attempt to emit Omni YAML for these joins."
+      example: |
+        # WARNING: cross-database join detected.
+        # Pre-join in warehouse: CREATE VIEW joined AS
+        #   SELECT ... FROM conn_a.t1 JOIN conn_b.t2 ON ...
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning appears in migration report for every affected worksheet."
+    notes: "RED is absolute. No guardrail can override."
+
+  - id: R-CONN-06
+    family: R-CONN
+    name: "Data blending"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.14"
+      xml_element: "datasource-dependencies"
+      xml_predicate: "linking primary and secondary datasources"
+    omni_target:
+      spec_section: "Omni §4, §5"
+      file_pattern: "views/*.view"
+      yaml_path: "derived_table.sql"
+    default_mapping:
+      strategy: derived_table_cte
+      summary: "Emit a derived_table view that performs the blend in SQL, then reference it. Treat the linking field as the join key."
+      example: |
+        view: blended
+        derived_table:
+          sql: |
+            SELECT p.*, s.metric
+            FROM primary p
+            LEFT JOIN secondary s ON p.link_key = s.link_key
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Row count of blended view equals row count of Tableau-blended worksheet."
+    notes: "If linking field is calculated on-the-fly in the worksheet, emit warning and recommend manual SQL."
+
+  - id: R-CONN-07
+    family: R-CONN
+    name: "Published-on-server datasource (sqlproxy)"
+    bucket: GREY
+    tableau_source:
+      spec_section: "TWBX §3.2"
+      xml_element: "connection"
+      xml_predicate: "@class='sqlproxy', @server, @username"
+    omni_target:
+      spec_section: "Omni §2"
+      file_pattern: "model.yaml"
+      yaml_path: "extends"
+    default_mapping:
+      strategy: model_layer_dimension
+      summary: "If a corresponding Omni shared model exists, emit extends: <model_id> in the workbook model file. If not, emit a warning."
+      example: |
+        extends: shared_finance_model_v3
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Workbook opens and inherits fields from the shared model."
+    notes: "Halt unless --allow-orphan-extends flag passed when no matching shared model on Omni instance."
+
+  - id: R-CONN-08
+    family: R-CONN
+    name: "Extract refresh schedule"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §3.12"
+      xml_element: "extract/refresh-schedule"
+      xml_predicate: "presence"
+    omni_target:
+      spec_section: "Omni §2"
+      file_pattern: "n/a"
+      yaml_path: "none (refresh in warehouse)"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Emit a warning that refresh logic must move to dbt or the warehouse scheduler. Include the original Tableau schedule string in the warning."
+      example: |
+        # WARNING: extract refresh schedule '<original>' cannot be migrated.
+        # Move refresh into dbt cloud job or warehouse scheduler.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning appears in migration report."
+
+  # === R-MODEL: Semantic model (6 rules) ===
+
+  - id: R-MODEL-01
+    family: R-MODEL
+    name: "Physical inner / left / right / full join"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.3"
+      xml_element: "relation"
+      xml_predicate: "@type='join' @join='inner|left|right|full'"
+    omni_target:
+      spec_section: "Omni §5"
+      file_pattern: "relationships.yaml"
+      yaml_path: "relationships[]"
+    default_mapping:
+      strategy: model_layer_dimension
+      summary: "Map join enum directly; serialize expression tree to on_sql: Mustache string."
+      example: |
+        - join_from_view: orders
+          join_to_view: customers
+          join_type: always_left
+          on_sql: ${orders.customer_id} = ${customers.id}
+          relationship_type: many_to_one
+    guardrails_consumed: [view_naming_convention]
+    failure_mode: warn_and_drop
+    verification: "Relationship resolves; sample joined query returns expected row count."
+    notes: "If expression tree contains a function Omni cannot represent, materialize as a derived_table with warning."
+
+  - id: R-MODEL-02
+    family: R-MODEL
+    name: "Multi-clause / calc-based join"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.3"
+      xml_element: "clause"
+      xml_predicate: "multi-expression body"
+    omni_target:
+      spec_section: "Omni §5"
+      file_pattern: "relationships.yaml"
+      yaml_path: "on_sql"
+    default_mapping:
+      strategy: model_layer_dimension
+      summary: "Walk every clause, render as ${left} = ${right}, join with AND."
+      example: |
+        on_sql: |
+          ${orders.customer_id} = ${customers.id}
+          AND ${orders.region} = ${customers.region}
+    guardrails_consumed: []
+    failure_mode: best_effort
+    verification: "Relationship validates in Omni; join cardinality holds."
+    notes: "Clause with Tableau-specific operator falls back to literal SQL with warning."
+
+  - id: R-MODEL-03
+    family: R-MODEL
+    name: "Logical relationship (noodle)"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.4"
+      xml_element: "relationship"
+      xml_predicate: "first-end-point and second-end-point cardinality attrs"
+    omni_target:
+      spec_section: "Omni §5"
+      file_pattern: "relationships.yaml"
+      yaml_path: "relationship_type"
+    default_mapping:
+      strategy: model_layer_dimension
+      summary: "many+one to many_to_one; one+one to one_to_one; many+many to many_to_many. join_type defaults to always_left."
+      example: |
+        - join_from_view: orders
+          join_to_view: customers
+          join_type: always_left
+          relationship_type: many_to_one
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Relationship validates; row count post-join does not inflate."
+    notes: "Cardinality unspecified defaults to many_to_one with warning."
+
+  - id: R-MODEL-04
+    family: R-MODEL
+    name: "Custom SQL relation"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.3"
+      xml_element: "relation"
+      xml_predicate: "@type='text' with SQL body"
+    omni_target:
+      spec_section: "Omni §3"
+      file_pattern: "views/*.view"
+      yaml_path: "sql or derived_table.sql"
+    default_mapping:
+      strategy: derived_table_cte
+      summary: "XML-unescape body (TWBX 0.3), paste into the view sql: block, run a SQL formatter pass."
+      example: |
+        view: custom_orders
+        sql: |
+          SELECT o.id, o.amount
+          FROM orders o
+          WHERE o.created_at > '2024-01-01'
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Derived_table compiles in Omni; row count matches Tableau extract."
+    notes: "SQL referencing a Tableau-only function emits warning and replaces with TODO marker."
+
+  - id: R-MODEL-05
+    family: R-MODEL
+    name: "Topic naming and creation"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.1"
+      xml_element: "datasource"
+      xml_predicate: "@caption, @name"
+    omni_target:
+      spec_section: "Omni §4"
+      file_pattern: "topics/*.topic"
+      yaml_path: "base_view"
+    default_mapping:
+      strategy: model_layer_dimension
+      summary: "Emit <snake_case_clean caption>.topic with base_view set to the primary table. Strip Tableau adornments (federated, sqlproxy prefixes)."
+      example: |
+        topic: salesforce_crm
+        base_view: sf_opportunities
+    guardrails_consumed: [topic_naming_convention]
+    failure_mode: best_effort
+    verification: "Topic loads in Omni IDE."
+    notes: "Empty or special-character caption falls back to name attribute."
+
+  - id: R-MODEL-06
+    family: R-MODEL
+    name: "Union relation"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.3"
+      xml_element: "relation"
+      xml_predicate: "@type='union'"
+    omni_target:
+      spec_section: "Omni §3"
+      file_pattern: "views/*.view"
+      yaml_path: "derived_table.sql"
+    default_mapping:
+      strategy: derived_table_cte
+      summary: "Materialize as a derived_table with explicit UNION ALL between source tables, then reference."
+      example: |
+        view: unioned
+        derived_table:
+          sql: |
+            SELECT * FROM source_2024
+            UNION ALL
+            SELECT * FROM source_2025
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Derived_table row count equals sum of source row counts."
+    notes: "Diverging schemas across union sources emit warning naming the diverging columns."
+
+  # === R-FIELD: Columns, dimensions, measures (7 rules) ===
+
+  - id: R-FIELD-01
+    family: R-FIELD
+    name: "Column data type"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.5"
+      xml_element: "column"
+      xml_predicate: "@datatype='string|integer|real|date|datetime|boolean'"
+    omni_target:
+      spec_section: "Omni §3.3"
+      file_pattern: "views/*.view"
+      yaml_path: "dimension.type"
+    default_mapping:
+      strategy: model_layer_dimension
+      summary: "Lookup table: string to string, integer/real to number, date to date, datetime to timestamp, boolean to yesno."
+      example: |
+        # Tableau -> Omni
+        # string   -> string
+        # integer  -> number
+        # real     -> number
+        # date     -> date
+        # datetime -> timestamp
+        # boolean  -> yesno
+    guardrails_consumed: []
+    failure_mode: best_effort
+    verification: "Omni view loads; dimension type matches."
+    notes: "Datatype geometry or spatial demotes to R-FIELD-07."
+
+  - id: R-FIELD-02
+    family: R-FIELD
+    name: "Dimension vs measure role"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.5"
+      xml_element: "column"
+      xml_predicate: "@role='dimension|measure'"
+    omni_target:
+      spec_section: "Omni §3"
+      file_pattern: "views/*.view"
+      yaml_path: "dimensions vs measures section"
+    default_mapping:
+      strategy: model_layer_dimension
+      summary: "Place the field under the named section in the view YAML."
+      example: |
+        dimensions:
+          region: { sql: ${TABLE}.REGION, type: string }
+        measures:
+          total_sales: { sql: ${TABLE}.AMOUNT, aggregate_type: sum }
+    guardrails_consumed: [default_aggregation_strategy]
+    failure_mode: best_effort
+    verification: "Field appears in Omni's correct shelf."
+    notes: "Role missing defaults to dimension for string/date, measure for numeric, with warning."
+
+  - id: R-FIELD-03
+    family: R-FIELD
+    name: "Default aggregation"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.5"
+      xml_element: "column"
+      xml_predicate: "@aggregation='Sum|Avg|Count|CountD|Min|Max|Median|...'"
+    omni_target:
+      spec_section: "Omni §3.2"
+      file_pattern: "views/*.view"
+      yaml_path: "measure.aggregate_type"
+    default_mapping:
+      strategy: model_layer_measure
+      summary: "Lookup: Sum to sum, Avg to average, Count to count, CountD to count_distinct, Min/Max/Median direct, Percentile to percentile."
+      example: |
+        # Tableau -> Omni
+        # Sum         -> sum
+        # Avg         -> average
+        # Count       -> count
+        # CountD      -> count_distinct
+        # Min         -> min
+        # Max         -> max
+        # Median      -> median
+        # Percentile  -> percentile
+    guardrails_consumed: [default_aggregation_strategy]
+    failure_mode: best_effort
+    verification: "Aggregated measure value matches Tableau extract sum/avg/etc."
+    notes: "Aggregation AttributeOf demotes to R-FIELD-05."
+
+  - id: R-FIELD-04
+    family: R-FIELD
+    name: "Default format"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.5, §8.4"
+      xml_element: "column"
+      xml_predicate: "@default-format='c0|p1%|#,##0.00'"
+    omni_target:
+      spec_section: "Omni §3.4"
+      file_pattern: "views/*.view"
+      yaml_path: "format or value_format"
+    default_mapping:
+      strategy: format_string_best_effort
+      summary: "Translate Tableau shortcuts to Excel-style strings via lookup. See R-FORMAT-02 for shortcut table."
+      example: |
+        measures:
+          total_sales:
+            sql: ${TABLE}.AMOUNT
+            aggregate_type: sum
+            format: "$#,##0"
+    guardrails_consumed: [format_string_dialect, null_handling]
+    failure_mode: best_effort
+    verification: "Rendered cell value matches Tableau worksheet output."
+    notes: "Format shortcut not in lookup table emits best-guess with warning."
+
+  - id: R-FIELD-05
+    family: R-FIELD
+    name: "AttributeOf aggregation"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.5, §4.1"
+      xml_element: "column"
+      xml_predicate: "@aggregation='AttributeOf'"
+    omni_target:
+      spec_section: "Omni §3.2"
+      file_pattern: "views/*.view"
+      yaml_path: "measures.<name>.sql"
+    default_mapping:
+      strategy: model_layer_measure
+      summary: "Emit SQL-driven measure with disagreement CASE."
+      example: |
+        measures:
+          region_attr:
+            sql: |
+              CASE WHEN MIN(${TABLE}.region) = MAX(${TABLE}.region)
+                   THEN MIN(${TABLE}.region) END
+            type: string
+    guardrails_consumed: []
+    failure_mode: best_effort
+    verification: "Rows that disagree return NULL, as in Tableau."
+
+  - id: R-FIELD-06
+    family: R-FIELD
+    name: "Aliases (display-value remapping)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.7"
+      xml_element: "aliases/alias"
+      xml_predicate: "@key, @value pairs"
+    omni_target:
+      spec_section: "Omni §3"
+      file_pattern: "views/*.view"
+      yaml_path: "dimensions.<name>.sql"
+    default_mapping:
+      strategy: alias_remap
+      summary: "Dimension SQL with CASE WHEN remapping keys to display values."
+      example: |
+        dimensions:
+          status_label:
+            sql: |
+              CASE ${TABLE}.STATUS
+                WHEN 'A' THEN 'Active'
+                WHEN 'I' THEN 'Inactive'
+                ELSE ${TABLE}.STATUS
+              END
+            type: string
+    guardrails_consumed: [group_handling]
+    failure_mode: best_effort
+    verification: "Distinct labels in Omni view match Tableau-displayed labels."
+    notes: "ELSE branch preserves raw value when alias key not present in source data."
+
+  - id: R-FIELD-07
+    family: R-FIELD
+    name: "Geometry / spatial data type"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.5"
+      xml_element: "column"
+      xml_predicate: "@datatype='geometry'"
+    omni_target:
+      spec_section: "Omni §3"
+      file_pattern: "views/*.view"
+      yaml_path: "dimensions.<name>"
+    default_mapping:
+      strategy: passthrough
+      summary: "Pass through as type: string. If a Vega-Lite map tile (R-VIZ-09) consumes the field, use it as the lookup key against a public TopoJSON."
+      example: |
+        dimensions:
+          geom_field: { sql: ${TABLE}.GEOM, type: string }
+    guardrails_consumed: []
+    failure_mode: best_effort
+    verification: "Shape renders in Vega-Lite or appears as text in tables."
+    notes: "MAKEPOINT field with x/y components only is dropped or rewritten as separate lat/lng columns."
+
+  # === R-CALC: Calculated fields, LOD, table calcs (17 rules) ===
+
+  - id: R-CALC-01
+    family: R-CALC
+    name: "Arithmetic and math functions"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §4.1"
+      xml_element: "calculation"
+      xml_predicate: "@class='tableau' @formula='...'"
+    omni_target:
+      spec_section: "Omni §3.1"
+      file_pattern: "views/*.view"
+      yaml_path: "dimensions or measures sql"
+    default_mapping:
+      strategy: model_layer_dimension
+      summary: "Direct paste of formula body after token translation. [Field] to ${TABLE}.field or ${view.field} depending on cross-view reference."
+      example: |
+        dimensions:
+          profit_margin:
+            sql: (${TABLE}.PROFIT / NULLIF(${TABLE}.SALES, 0))
+            type: number
+    guardrails_consumed: [calculated_field_placement]
+    failure_mode: reject
+    verification: "Computed value matches Tableau extract for sample rows."
+    notes: "Undefined token reference halts with explicit message."
+
+  - id: R-CALC-02
+    family: R-CALC
+    name: "Logical (IF, IIF, CASE)"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §4.2"
+      xml_element: "calculation"
+      xml_predicate: "IF/IIF/CASE formula body"
+    omni_target:
+      spec_section: "Omni §3.1"
+      file_pattern: "views/*.view"
+      yaml_path: "dimensions/measures sql"
+    default_mapping:
+      strategy: case_when_dimension
+      summary: "Mechanical rewrite to SQL CASE WHEN ... THEN ... ELSE ... END. IIF(a,b,c,d) requires WHEN a IS NULL THEN d branch."
+      example: |
+        dimensions:
+          deal_tier:
+            sql: |
+              CASE
+                WHEN ${TABLE}.AMOUNT >= 1000000 THEN 'Mega'
+                WHEN ${TABLE}.AMOUNT >= 100000  THEN 'Large'
+                ELSE 'Small'
+              END
+            type: string
+    guardrails_consumed: [calculated_field_placement]
+    failure_mode: best_effort
+    verification: "Branch coverage tested against representative rows."
+    notes: "Nested IF deeper than 8 levels emits legibility warning but proceeds."
+
+  - id: R-CALC-03
+    family: R-CALC
+    name: "String / date / type functions"
+    bucket: GREEN/YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.1"
+      xml_element: "calculation"
+      xml_predicate: "LEN/LEFT/UPPER/DATEPART/DATETRUNC..."
+    omni_target:
+      spec_section: "Omni §3.1, §7.2"
+      file_pattern: "views/*.view"
+      yaml_path: "dimension_group.timeframes or sql"
+    default_mapping:
+      strategy: model_layer_dimension
+      summary: "Lookup table per warehouse dialect. Truncation prefers Omni timeframes."
+      example: |
+        # Tableau DATETRUNC('month', d) -> Omni dimension group
+        dimension_group: order
+        type: time
+        timeframes: [date, week, month, quarter, year]
+        sql: ${TABLE}.order_date
+    guardrails_consumed: [calculated_field_placement]
+    failure_mode: warn_and_drop
+    verification: "Sample value comparison."
+    notes: "Most functions GREEN; dialect-specific (e.g., ISOWEEK on no-ISO warehouse) YELLOW."
+
+  - id: R-CALC-04
+    family: R-CALC
+    name: "LOD FIXED"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.6, §4.3"
+      xml_element: "calculation"
+      xml_predicate: "@formula contains '{ FIXED [dim] : ... }'"
+    omni_target:
+      spec_section: "Omni §3"
+      file_pattern: "views/*.view"
+      yaml_path: "derived_table.sql + relationships"
+    default_mapping:
+      strategy: derived_table_cte
+      summary: "Emit one view per unique (dim-list, agg-expr) pair as a derived_table CTE, then a relationship."
+      example: |
+        views:
+          customer_total_sales:
+            derived_table:
+              sql: |
+                SELECT customer_id AS customer, SUM(sales) AS customer_total_sales
+                FROM orders
+                GROUP BY customer_id
+        relationships:
+          - join_from_view: orders
+            join_to_view: customer_total_sales
+            join_type: always_left
+            on_sql: ${orders.customer_id} = ${customer_total_sales.customer}
+            relationship_type: many_to_one
+    guardrails_consumed: [lod_placement]
+    failure_mode: warn_and_drop
+    verification: "Aggregated value at the fixed grain matches Tableau worksheet output."
+    notes: "FIXED-dim list including row-dependent calc emits warning, recommend SQL window fallback."
+
+  - id: R-CALC-05
+    family: R-CALC
+    name: "LOD INCLUDE"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.3"
+      xml_element: "calculation"
+      xml_predicate: "@formula contains '{ INCLUDE [dim] : ... }'"
+    omni_target:
+      spec_section: "Omni §3.2"
+      file_pattern: "views/*.view"
+      yaml_path: "measures.<name>.sql (window)"
+    default_mapping:
+      strategy: model_layer_measure
+      summary: "SUM(...) OVER (PARTITION BY <viz_dims>, <include_dim>). Materialize at the most granular meaningful level."
+      example: |
+        measures:
+          avg_profit_include_region:
+            sql: |
+              AVG(${TABLE}.profit) OVER (
+                PARTITION BY ${TABLE}.region
+              )
+            type: number
+    guardrails_consumed: [lod_placement]
+    failure_mode: warn_and_drop
+    verification: "Aggregated value matches Tableau output at the intended grain."
+    notes: "Calculated include dim emits warning, falls back to derived_table."
+
+  - id: R-CALC-06
+    family: R-CALC
+    name: "LOD EXCLUDE"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.3"
+      xml_element: "calculation"
+      xml_predicate: "@formula contains '{ EXCLUDE [dim] : ... }'"
+    omni_target:
+      spec_section: "Omni §3.2"
+      file_pattern: "views/*.view"
+      yaml_path: "measures.<name>.sql (window)"
+    default_mapping:
+      strategy: model_layer_measure
+      summary: "SUM(...) OVER (PARTITION BY <viz_dims minus excluded_dim>). Same viz-dim caveat as R-CALC-05."
+      example: |
+        measures:
+          sales_excl_region:
+            sql: |
+              SUM(${TABLE}.sales) OVER ()
+            type: number
+    guardrails_consumed: [lod_placement]
+    failure_mode: warn_and_drop
+    verification: "Same as R-CALC-05."
+
+  - id: R-CALC-07
+    family: R-CALC
+    name: "Table calc RUNNING_*"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.5"
+      xml_element: "table-calc"
+      xml_predicate: "@agg-type='Sum' @ordering-type='Rows'"
+    omni_target:
+      spec_section: "Omni §3.2"
+      file_pattern: "views/*.view"
+      yaml_path: "measures.<name>.sql"
+    default_mapping:
+      strategy: model_layer_measure
+      summary: "SQL window with ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW."
+      example: |
+        measures:
+          running_total_sales:
+            sql: |
+              SUM(${TABLE}.sales) OVER (
+                PARTITION BY {{ partition_field }}
+                ORDER BY {{ order_field }}
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+              )
+            type: number
+    guardrails_consumed: [table_calc_placement]
+    failure_mode: warn_and_drop
+    verification: "Cumulative sum at last row matches Tableau worksheet last-row value."
+
+  - id: R-CALC-08
+    family: R-CALC
+    name: "Table calc WINDOW_*"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.5"
+      xml_element: "table-calc"
+      xml_predicate: "WINDOW_AVG/SUM(expr, from, to)"
+    omni_target:
+      spec_section: "Omni §3.2"
+      file_pattern: "views/*.view"
+      yaml_path: "measures.<name>.sql"
+    default_mapping:
+      strategy: model_layer_measure
+      summary: "Map from/to integer attrs onto ROWS BETWEEN N PRECEDING AND M FOLLOWING."
+      example: |
+        measures:
+          ma_12_sales:
+            sql: |
+              AVG(${TABLE}.sales) OVER (
+                ORDER BY ${TABLE}.month
+                ROWS BETWEEN 11 PRECEDING AND CURRENT ROW
+              )
+            type: number
+    guardrails_consumed: [table_calc_placement]
+    failure_mode: best_effort
+    verification: "Spot-check at boundary rows."
+    notes: "First/Last tokens translate via offsets relative to FIRST_VALUE / LAST_VALUE."
+
+  - id: R-CALC-09
+    family: R-CALC
+    name: "Table calc RANK family"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §4.1, §4.5"
+      xml_element: "calculation"
+      xml_predicate: "RANK, RANK_DENSE, RANK_MODIFIED, RANK_PERCENTILE, RANK_UNIQUE"
+    omni_target:
+      spec_section: "Omni §3.2"
+      file_pattern: "views/*.view"
+      yaml_path: "measures.<name>.sql"
+    default_mapping:
+      strategy: model_layer_measure
+      summary: "Direct SQL window mapping for each RANK variant."
+      example: |
+        # RANK            -> RANK() OVER (...)
+        # RANK_DENSE      -> DENSE_RANK() OVER (...)
+        # RANK_PERCENTILE -> PERCENT_RANK() OVER (...)
+        # RANK_UNIQUE     -> ROW_NUMBER() OVER (...)
+        # RANK_MODIFIED   -> custom COUNT(*) OVER (...)
+    guardrails_consumed: [table_calc_placement]
+    failure_mode: warn_and_drop
+    verification: "Top-10 ranks match Tableau worksheet."
+    notes: "RANK_MODIFIED across nulls emits warning, hand-roll SQL."
+
+  - id: R-CALC-10
+    family: R-CALC
+    name: "Table calc INDEX / FIRST / LAST / SIZE / LOOKUP / TOTAL"
+    bucket: YELLOW/GREEN
+    tableau_source:
+      spec_section: "TWBX §4.5"
+      xml_element: "calculation"
+      xml_predicate: "INDEX/FIRST/LAST/SIZE/LOOKUP/TOTAL"
+    omni_target:
+      spec_section: "Omni §3.2"
+      file_pattern: "views/*.view"
+      yaml_path: "measures.<name>.sql"
+    default_mapping:
+      strategy: model_layer_measure
+      summary: "Direct SQL translation. ROW_NUMBER, FIRST_VALUE, LAST_VALUE, COUNT(*) OVER, LAG/LEAD, SUM() OVER ()."
+      example: |
+        # INDEX  -> ROW_NUMBER() OVER (...)
+        # FIRST  -> negative offset to FIRST_VALUE
+        # LAST   -> positive offset to LAST_VALUE
+        # SIZE   -> COUNT(*) OVER (PARTITION BY ...)
+        # LOOKUP -> LAG/LEAD
+        # TOTAL  -> SUM(...) OVER ()
+    guardrails_consumed: [table_calc_placement]
+    failure_mode: warn_and_drop
+    verification: "Spot-check at first, middle, last row."
+    notes: "INDEX/FIRST/LAST/SIZE YELLOW; LOOKUP/TOTAL GREEN."
+
+  - id: R-CALC-11
+    family: R-CALC
+    name: "Quick table calcs (% of total, difference, % difference, moving avg)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.5"
+      xml_element: "calculation"
+      xml_predicate: "@derivation='PercentOfTotal|Difference|...'"
+    omni_target:
+      spec_section: "Omni §3.2, §7.1"
+      file_pattern: "views/*.view"
+      yaml_path: "measures.<name>.sql or pivot row_totals"
+    default_mapping:
+      strategy: model_layer_measure
+      summary: "Prefer Omni native pivot row_totals for % of total; SQL window for everything else."
+      example: |
+        measures:
+          pct_of_total_sales:
+            sql: |
+              SUM(${TABLE}.sales)
+              / NULLIF(SUM(SUM(${TABLE}.sales)) OVER (PARTITION BY {{ partition_field }}), 0)
+            type: number
+    guardrails_consumed: [table_calc_placement]
+    failure_mode: best_effort
+    verification: "Column percentages sum to 100 percent per partition."
+    notes: "NULLIF prevents division by zero."
+
+  - id: R-CALC-12
+    family: R-CALC
+    name: "Custom table calc"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.5"
+      xml_element: "calculation"
+      xml_predicate: "@derivation='Custom' @formula='...'"
+    omni_target:
+      spec_section: "Omni §3.2"
+      file_pattern: "views/*.view"
+      yaml_path: "measures.<name>.sql"
+    default_mapping:
+      strategy: model_layer_measure
+      summary: "Parse inner formula, rewrite arithmetic into window SQL."
+      example: |
+        measures:
+          custom_window:
+            sql: |
+              SUM(${TABLE}.x) OVER (PARTITION BY ${TABLE}.group)
+              - AVG(${TABLE}.x) OVER ()
+            type: number
+    guardrails_consumed: [table_calc_placement]
+    failure_mode: warn_and_drop
+    verification: "Sample value match."
+    notes: "SCRIPT_* references demote to R-CALC-13."
+
+  - id: R-CALC-13
+    family: R-CALC
+    name: "SCRIPT_* (R / Python integration)"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §4.5"
+      xml_element: "calculation"
+      xml_predicate: "SCRIPT_REAL/INT/STR/BOOL"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Emit warning naming the script body. Recommend dbt + Python or pre-compute upstream."
+      example: |
+        # WARNING: SCRIPT_REAL block dropped.
+        # Recommend dbt python model or upstream pre-compute.
+    guardrails_consumed: [forecast_cluster_handling]
+    failure_mode: warn_and_drop
+    verification: "Warning appears in migration report."
+
+  - id: R-CALC-14
+    family: R-CALC
+    name: "Predictive (MODEL_PERCENTILE, MODEL_QUANTILE)"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §4.1"
+      xml_element: "calculation"
+      xml_predicate: "MODEL_PERCENTILE/MODEL_QUANTILE"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Emit warning. Recommend SNOWFLAKE.ML.FORECAST or BigQuery ML upstream."
+      example: |
+        # WARNING: MODEL_PERCENTILE dropped.
+        # Recommend SNOWFLAKE.ML.FORECAST upstream.
+    guardrails_consumed: [forecast_cluster_handling]
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  - id: R-CALC-15
+    family: R-CALC
+    name: "Spatial functions (MAKEPOINT, MAKELINE, DISTANCE, BUFFER, AREA)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.1"
+      xml_element: "calculation"
+      xml_predicate: "MAKEPOINT(lat,lng) etc."
+    omni_target:
+      spec_section: "Omni §3.1"
+      file_pattern: "views/*.view"
+      yaml_path: "dimensions.<name>.sql"
+    default_mapping:
+      strategy: model_layer_dimension
+      summary: "Dialect lookup, prefer ST_* (Snowflake / BigQuery / PostGIS)."
+      example: |
+        dimensions:
+          point:
+            sql: ST_MAKEPOINT(${TABLE}.LNG, ${TABLE}.LAT)
+            type: string
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Distance / area values match a manual SQL query."
+    notes: "Warehouse lacking spatial extension emits warning."
+
+  - id: R-CALC-16
+    family: R-CALC
+    name: "HEXBINX / HEXBINY"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §4.1"
+      xml_element: "calculation"
+      xml_predicate: "HEXBINX(x,y,size)"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Emit warning. Pre-compute hex coordinates upstream."
+      example: |
+        # WARNING: HEXBINX dropped. Pre-compute hex bins upstream.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  - id: R-CALC-17
+    family: R-CALC
+    name: "Forward references between calcs"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §4.4"
+      xml_element: "calculation"
+      xml_predicate: "[CaptionA] referenced inside Calc B defined earlier"
+    omni_target:
+      spec_section: "Omni §3.2"
+      file_pattern: "views/*.view"
+      yaml_path: "any field sql"
+    default_mapping:
+      strategy: model_layer_dimension
+      summary: "Build a DAG, but emit fields in any order. Omni resolves ${field} lazily at compile time."
+      example: |
+        # Forward refs OK; Omni's compile-time resolution handles them.
+    guardrails_consumed: []
+    failure_mode: reject
+    verification: "Omni view compiles."
+    notes: "Circular reference halts with explicit cycle path."
+
+  # === R-DERIVED: Groups, sets, bins, hierarchies (6 rules) ===
+
+  - id: R-DERIVED-01
+    family: R-DERIVED
+    name: "Set (manual list)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.9"
+      xml_element: "set/member/value"
+      xml_predicate: "static value list"
+    omni_target:
+      spec_section: "Omni §3"
+      file_pattern: "views/*.view"
+      yaml_path: "dimensions.<name> yesno"
+    default_mapping:
+      strategy: set_dimension_flag
+      summary: "Boolean yesno dimension with IN (...)."
+      example: |
+        dimensions:
+          is_in_top_customers:
+            sql: |
+              CASE WHEN ${TABLE}.customer_name IN ('Acme Inc','Globex') THEN true ELSE false END
+            type: yesno
+    guardrails_consumed: [set_handling]
+    failure_mode: warn_and_drop
+    verification: "Dimension boolean count matches Tableau set membership count."
+    notes: "Set members > 1000 emit warning, recommend derived_table lookup."
+
+  - id: R-DERIVED-02
+    family: R-DERIVED
+    name: "Set (condition-based)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.9"
+      xml_element: "set/condition/expression"
+      xml_predicate: "expression body"
+    omni_target:
+      spec_section: "Omni §3"
+      file_pattern: "views/*.view"
+      yaml_path: "dimensions.<name> yesno"
+    default_mapping:
+      strategy: set_dimension_flag
+      summary: "Boolean dimension with CASE WHEN <expr>."
+      example: |
+        dimensions:
+          high_value:
+            sql: |
+              CASE WHEN ${TABLE}.amount > 10000 THEN true ELSE false END
+            type: yesno
+    guardrails_consumed: [set_handling]
+    failure_mode: warn_and_drop
+    verification: "Boolean count matches Tableau set."
+    notes: "Aggregated field reference promotes to measure-level filter or demotes to R-DERIVED-03."
+
+  - id: R-DERIVED-03
+    family: R-DERIVED
+    name: "Set (top-N)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.9"
+      xml_element: "set/top"
+      xml_predicate: "@n, @by, @direction='TOP'"
+    omni_target:
+      spec_section: "Omni §3"
+      file_pattern: "views/*.view"
+      yaml_path: "hidden rank dim + topic filter"
+    default_mapping:
+      strategy: set_dimension_flag
+      summary: "Emit hidden rank dimension and LESS_THAN_OR_EQUAL_TO filter at topic level. See R-FILTER-06 for filter shape."
+      example: |
+        dimensions:
+          customer_sales_rank:
+            sql: RANK() OVER (ORDER BY ${TABLE}.total_sales DESC)
+            type: number
+            hidden: true
+    guardrails_consumed: [set_handling]
+    failure_mode: warn_and_drop
+    verification: "Top-10 rows in Omni match Tableau set members."
+
+  - id: R-DERIVED-04
+    family: R-DERIVED
+    name: "Group (categorical-bin)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.7"
+      xml_element: "calculation"
+      xml_predicate: "@class='categorical-bin' with bin/value children"
+    omni_target:
+      spec_section: "Omni §3"
+      file_pattern: "views/*.view"
+      yaml_path: "dimensions.<name>.sql"
+    default_mapping:
+      strategy: case_when_dimension
+      summary: "Dimension SQL with CASE WHEN ... IN (...) THEN."
+      example: |
+        dimensions:
+          product_group:
+            sql: |
+              CASE
+                WHEN ${TABLE}.PRODUCT_NAME IN ('Acme Widget','Acme Sprocket') THEN 'Acme Group'
+                WHEN ${TABLE}.PRODUCT_NAME IN ('Globex Foo','Globex Bar') THEN 'Globex Group'
+                ELSE ${TABLE}.PRODUCT_NAME
+              END
+            type: string
+    guardrails_consumed: [group_handling]
+    failure_mode: best_effort
+    verification: "Distinct group labels match Tableau worksheet."
+    notes: "Aliased value references resolve aliases first (R-FIELD-06), then group."
+
+  - id: R-DERIVED-05
+    family: R-DERIVED
+    name: "Numeric bin"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.8"
+      xml_element: "calculation"
+      xml_predicate: "@class='bin' @column, @size"
+    omni_target:
+      spec_section: "Omni §3"
+      file_pattern: "views/*.view"
+      yaml_path: "dimensions.<name>.sql"
+    default_mapping:
+      strategy: bin_native
+      summary: "Dimension FLOOR(x/size)*size."
+      example: |
+        dimensions:
+          amount_bin:
+            sql: FLOOR(${TABLE}.AMOUNT / 1000) * 1000
+            type: number
+    guardrails_consumed: [bin_handling]
+    failure_mode: reject
+    verification: "Bin counts match Tableau histogram."
+    notes: "Size 0 or null halts."
+
+  - id: R-DERIVED-06
+    family: R-DERIVED
+    name: "Hierarchy / drill-paths"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.11"
+      xml_element: "drill-paths/drill-path/field"
+      xml_predicate: "ordered field list"
+    omni_target:
+      spec_section: "Omni §3, §12"
+      file_pattern: "views/*.view"
+      yaml_path: "measures.<name>.drill_fields"
+    default_mapping:
+      strategy: hierarchy_drill_fields
+      summary: "drill_fields: on measure plus ai_context mention."
+      example: |
+        measures:
+          total_sales:
+            aggregate_type: sum
+            sql: ${TABLE}.amount
+            drill_fields: [country, state, city, postal_code]
+    guardrails_consumed: [hierarchy_handling]
+    failure_mode: best_effort
+    verification: "Drill click in Omni cycles through the hierarchy."
+    notes: "Calculated drill dims must be promoted to real Omni dimensions first."
+
+  # === R-PARAM: Parameters (4 rules) ===
+
+  - id: R-PARAM-01
+    family: R-PARAM
+    name: "Parameter list domain"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.10"
+      xml_element: "parameter/domain"
+      xml_predicate: "@type='list' with members"
+    omni_target:
+      spec_section: "Omni §9.6"
+      file_pattern: "topics/*.topic"
+      yaml_path: "filters.<name>"
+    default_mapping:
+      strategy: omni_control
+      summary: "Topic-level templated filter with suggestion_list."
+      example: |
+        filters:
+          region_param:
+            type: string
+            default_filter: West
+            suggestion_list: [West, East, Central, South]
+            display_order: 1
+    guardrails_consumed: [parameter_handling]
+    failure_mode: best_effort
+    verification: "Omni dashboard control shows the same options."
+    notes: "Dynamic member list from field demotes to free-form type: string."
+
+  - id: R-PARAM-02
+    family: R-PARAM
+    name: "Parameter range domain"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.10"
+      xml_element: "parameter/domain"
+      xml_predicate: "@type='range' @min, @max, @granularity"
+    omni_target:
+      spec_section: "Omni §9.6"
+      file_pattern: "topics/*.topic"
+      yaml_path: "filters.<name>"
+    default_mapping:
+      strategy: omni_control
+      summary: "Templated filter type number or timestamp. No min/max constraint; note constraint in description."
+      example: |
+        filters:
+          amount_range:
+            type: number
+            description: "Range 1000 to 1000000 in steps of 1000"
+            display_order: 1
+    guardrails_consumed: [parameter_handling]
+    failure_mode: warn_and_drop
+    verification: "User can enter values inside the documented range."
+    notes: "Omni UI does not enforce numeric bounds. Granularity for date stepping emits warning."
+
+  - id: R-PARAM-03
+    family: R-PARAM
+    name: "Parameter any domain"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.10"
+      xml_element: "parameter/domain"
+      xml_predicate: "@type='any'"
+    omni_target:
+      spec_section: "Omni §9.6"
+      file_pattern: "topics/*.topic"
+      yaml_path: "filters.<name>"
+    default_mapping:
+      strategy: omni_control
+      summary: "Templated filter type string with no suggestion list."
+      example: |
+        filters:
+          search_text:
+            type: string
+            display_order: 2
+    guardrails_consumed: [parameter_handling]
+    failure_mode: passthrough
+    verification: "Free-form input accepted."
+
+  - id: R-PARAM-04
+    family: R-PARAM
+    name: "Parameter referenced in a calc"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.10, §4"
+      xml_element: "calculation"
+      xml_predicate: "[Parameter X] token inside @formula"
+    omni_target:
+      spec_section: "Omni §9.6"
+      file_pattern: "views/*.view"
+      yaml_path: "templated sql with {{ filters... }}"
+    default_mapping:
+      strategy: omni_control
+      summary: "Replace every [Parameter X] reference with the Mustache filter token. Convert the calc to templated SQL."
+      example: |
+        dimensions:
+          dynamic_threshold:
+            sql: |
+              CASE WHEN ${TABLE}.amount > {{ filters.amount_threshold.value }}
+                   THEN 'above' ELSE 'below' END
+            type: string
+    guardrails_consumed: [parameter_handling]
+    failure_mode: warn_and_drop
+    verification: "Changing the control value re-renders the tile with new SQL."
+    notes: "Parameter inside string literal needs careful escaping."
+
+  # === R-VIZ: Visualizations, marks, encodings, axes (29 rules) ===
+
+  - id: R-VIZ-01
+    family: R-VIZ
+    name: "Bar mark"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Bar'"
+    omni_target:
+      spec_section: "Omni §8.5"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "visType: basic, mark.type: bar"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Omni renders horizontal bars by default. Swap rows/columns vs Tableau: category on y, measure on series."
+      example: |
+        visType: basic
+        mark: { type: bar }
+        # rotated true for vertical orientation
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Bar count and order match Tableau worksheet."
+    notes: "Too many categories for horizontal rendering emits warning, suggests rotated: true."
+
+  - id: R-VIZ-02
+    family: R-VIZ
+    name: "Line mark"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Line'"
+    omni_target:
+      spec_section: "Omni §8.4"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "visType: basic, mark.type: line"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "x temporal, y quantitative. Direct map."
+      example: |
+        visType: basic
+        mark: { type: line }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Line shape matches Tableau worksheet."
+    notes: "Non-temporal x with line mark emits warning (often a Tableau accident)."
+
+  - id: R-VIZ-03
+    family: R-VIZ
+    name: "Area mark"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Area'"
+    omni_target:
+      spec_section: "Omni §8.1"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "visType: basic, mark.type: area"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Direct."
+      example: |
+        visType: basic
+        mark: { type: area }
+    guardrails_consumed: []
+    failure_mode: passthrough
+    verification: "Filled area matches Tableau."
+
+  - id: R-VIZ-04
+    family: R-VIZ
+    name: "Circle / scatter mark"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Circle'"
+    omni_target:
+      spec_section: "Omni §8.6"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "visType: basic, mark.type: circle"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Direct."
+      example: |
+        visType: basic
+        mark: { type: circle }
+    guardrails_consumed: []
+    failure_mode: passthrough
+    verification: "Point count matches."
+
+  - id: R-VIZ-05
+    family: R-VIZ
+    name: "Square / shape mark"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Square' or @class='Shape'"
+    omni_target:
+      spec_section: "Omni §8.6, §8.11"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "basic circle with shape override, or Vega-Lite point"
+    default_mapping:
+      strategy: vega_lite_escape
+      summary: "Emit Vega-Lite with shape channel set to a unicode glyph if custom PNGs were used."
+      example: |
+        visType: vegalite
+        spec:
+          mark: { type: point, shape: "M0,0L1,1Z" }
+          encoding: { shape: { field: category } }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Visual review of one tile."
+    notes: "Custom PNG shapes demote to R-VIZ-06."
+
+  - id: R-VIZ-06
+    family: R-VIZ
+    name: "Custom shape PNG"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §2.4, §5.7"
+      xml_element: "external/shapes"
+      xml_predicate: "PNG file reference"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Drop shape encoding; substitute Unicode glyph or default shape with warning."
+      example: |
+        # WARNING: custom shape PNG dropped. Using default circle.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning lists every dropped PNG."
+
+  - id: R-VIZ-07
+    family: R-VIZ
+    name: "Text table"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Text'"
+    omni_target:
+      spec_section: "Omni §8.7"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "visType: omni-spreadsheet or omni-table"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Emit spreadsheet visType with columns from the encoding shelves."
+      example: |
+        visType: omni-spreadsheet
+    guardrails_consumed: []
+    failure_mode: passthrough
+    verification: "Row count and column order match."
+
+  - id: R-VIZ-08
+    family: R-VIZ
+    name: "Pie / donut"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Pie'"
+    omni_target:
+      spec_section: "Omni §8.1"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "visType: basic, configType: arc"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Direct. Donut uses same configType with inner radius."
+      example: |
+        visType: basic
+        configType: arc
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Slice angles sum to 360."
+    notes: "Too many slices (>12) renders poorly, emits warning."
+
+  - id: R-VIZ-09
+    family: R-VIZ
+    name: "Map (filled / symbol)"
+    bucket: YELLOW/GREY
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Map'"
+    omni_target:
+      spec_section: "Omni §8.1, §8.11"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "visType: map or vegalite geoshape"
+    default_mapping:
+      strategy: vega_lite_escape
+      summary: "Vega-Lite geoshape against public TopoJSON. Use the bound dimension as the lookup key."
+      example: |
+        visType: vegalite
+        spec:
+          data: { url: "https://vega.github.io/vega-datasets/data/us-10m.json" }
+          mark: geoshape
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Shape count matches Tableau."
+    notes: "Filled YELLOW, symbol GREY. Ambiguous geo encoding emits warning."
+
+  - id: R-VIZ-10
+    family: R-VIZ
+    name: "Dual axis (synchronized)"
+    bucket: GREY
+    tableau_source:
+      spec_section: "TWBX §5.10"
+      xml_element: "panes"
+      xml_predicate: "@synchronized='true' with two pane children"
+    omni_target:
+      spec_section: "Omni §8.4"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "y2 axis or Vega-Lite layered"
+    default_mapping:
+      strategy: vega_lite_layered
+      summary: "Vega-Lite layered spec, resolve.scale.y: 'shared'."
+      example: |
+        visType: vegalite
+        spec:
+          layer:
+            - mark: bar
+            - mark: line
+          resolve: { scale: { y: shared } }
+    guardrails_consumed: [dual_axis_strategy]
+    failure_mode: warn_and_drop
+    verification: "Both series render on the same axis with matching scale."
+    notes: "More than 2 panes emits warning."
+
+  - id: R-VIZ-11
+    family: R-VIZ
+    name: "Dual axis (independent)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.10"
+      xml_element: "panes"
+      xml_predicate: "@synchronized='false'"
+    omni_target:
+      spec_section: "Omni §8.11"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "Vega-Lite layered, independent y"
+    default_mapping:
+      strategy: vega_lite_layered
+      summary: "Layered spec with independent y scales."
+      example: |
+        visType: vegalite
+        spec:
+          layer:
+            - mark: bar
+            - mark: line
+          resolve: { scale: { y: independent } }
+    guardrails_consumed: [dual_axis_strategy]
+    failure_mode: warn_and_drop
+    verification: "Each series has its own y axis."
+
+  - id: R-VIZ-12
+    family: R-VIZ
+    name: "Combined axis (Measure Names / Values)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.4"
+      xml_element: "rows or cols"
+      xml_predicate: "contains [Multiple Values]"
+    omni_target:
+      spec_section: "Omni §8.4"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "series[] entries shared y"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "One series per measure, same yAxis: y."
+      example: |
+        series:
+          - { field: total_sales, yAxis: y }
+          - { field: total_profit, yAxis: y }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Legend shows all measures."
+    notes: "Incompatible scales demote to R-VIZ-11."
+
+  - id: R-VIZ-13
+    family: R-VIZ
+    name: "Trellis / small multiples"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.5"
+      xml_element: "rows/cols"
+      xml_predicate: "multi-pill producing facet"
+    omni_target:
+      spec_section: "Omni §8.11, §6.1"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "Vega-Lite facet or multiple tiles"
+    default_mapping:
+      strategy: vega_lite_escape
+      summary: "Vega-Lite facet for single-tile, or N tiles for dashboard-level static repetition (loses reactivity)."
+      example: |
+        visType: vegalite
+        spec:
+          facet: { field: region, type: nominal }
+          spec: { mark: bar }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Facet count matches Tableau."
+    notes: "Facet dim with >50 distinct values emits warning."
+
+  - id: R-VIZ-14
+    family: R-VIZ
+    name: "Density / heatmap"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Density'"
+    omni_target:
+      spec_section: "Omni §8.1"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "basic heatmap"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Direct."
+      example: |
+        visType: basic
+        mark: { type: rect }
+    guardrails_consumed: []
+    failure_mode: passthrough
+    verification: "Cell color gradient matches."
+
+  - id: R-VIZ-15
+    family: R-VIZ
+    name: "Forecast (analytics object)"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §5.12"
+      xml_element: "forecast"
+      xml_predicate: "model parameters"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Emit warning. If forecast_cluster_handling: precompute_snowflake, generate a stub dbt model spec."
+      example: |
+        # WARNING: forecast dropped. Recommend SNOWFLAKE.ML.FORECAST upstream.
+    guardrails_consumed: [forecast_cluster_handling]
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  - id: R-VIZ-16
+    family: R-VIZ
+    name: "Cluster analysis"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §5.12"
+      xml_element: "cluster"
+      xml_predicate: "@k='...'"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Emit warning. If precompute_snowflake, recommend a clustering dbt model."
+      example: |
+        # WARNING: cluster analysis dropped.
+        # Recommend clustering dbt model upstream.
+    guardrails_consumed: [forecast_cluster_handling]
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  - id: R-VIZ-17
+    family: R-VIZ
+    name: "Reference line / band / distribution"
+    bucket: GREY/YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.12"
+      xml_element: "reference-line / reference-band / reference-distribution"
+      xml_predicate: "presence"
+    omni_target:
+      spec_section: "Omni §8.12"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "visConfig.referenceLines or Vega-Lite rule/rect"
+    default_mapping:
+      strategy: vega_lite_escape
+      summary: "Vega-Lite rule mark for line; rect mark for band."
+      example: |
+        visType: vegalite
+        spec:
+          layer:
+            - mark: { type: rule }
+              encoding: { y: { datum: 1000 } }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Line position matches Tableau value."
+    notes: "Reference line type 'forecast' demotes to R-VIZ-15."
+
+  - id: R-VIZ-18
+    family: R-VIZ
+    name: "Trend line"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.12"
+      xml_element: "trend-line"
+      xml_predicate: "@model='linear|log|exp|polynomial|power'"
+    omni_target:
+      spec_section: "Omni §8.11"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "Vega-Lite regression transform"
+    default_mapping:
+      strategy: vega_lite_escape
+      summary: "Vega-Lite regression transform. Method values: linear, log, exp, pow, quad, poly."
+      example: |
+        visType: vegalite
+        spec:
+          transform: [{ regression: y, on: x, method: linear }]
+          mark: line
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Regression slope sign matches Tableau."
+    notes: "Confidence band requested emits warning, drops the band."
+
+  - id: R-VIZ-19
+    family: R-VIZ
+    name: "Sort (manual, computed, alphabetic, nested)"
+    bucket: GREEN/YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.11"
+      xml_element: "sort"
+      xml_predicate: "@class='manual|computed|alphabetic'"
+    omni_target:
+      spec_section: "Omni §7.1"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "queryJson.sorts[]"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Computed and alphabetic map directly. Manual sort emits a hidden ordering dimension with CASE WHEN."
+      example: |
+        sorts:
+          - column_name: view.total_sales
+            is_column_sort: false
+            null_sort: OMNI_DEFAULT
+            sort_descending: true
+    guardrails_consumed: []
+    failure_mode: best_effort
+    verification: "Row order matches Tableau worksheet."
+    notes: "Computed/alpha GREEN; manual/nested YELLOW."
+
+  - id: R-VIZ-20
+    family: R-VIZ
+    name: "Tooltip with formatted text"
+    bucket: GREEN/YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.7, §5.8"
+      xml_element: "tooltip / formatted-text"
+      xml_predicate: "tooltip column refs with run formatting"
+    omni_target:
+      spec_section: "Omni §8.4"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "visConfig.tooltip[]"
+    default_mapping:
+      strategy: tooltip_omni_native
+      summary: "One tooltip entry per <tooltip>. Collapse <run> formatting to plain text."
+      example: |
+        tooltip:
+          - { field: { name: view.notes } }
+    guardrails_consumed: [tooltip_handling]
+    failure_mode: best_effort
+    verification: "Hover shows expected fields."
+    notes: "Basic GREEN; styled runs YELLOW. Tooltip-referenced measure not in query is added to queryJson.fields[]."
+
+  - id: R-VIZ-21
+    family: R-VIZ
+    name: "Stacked / grouped / 100% stacked bars"
+    bucket: GREEN/GREY
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Bar' with color encoding"
+    omni_target:
+      spec_section: "Omni §8.5"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "behaviors.stackMultiMark"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Stacked default; grouped sets stackMultiMark: false; 100% stacked uses stack %."
+      example: |
+        behaviors:
+          stackMultiMark: true
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Stack semantics match Tableau (visual)."
+    notes: "Stacked/grouped GREEN; 100% stacked GREY with placeholder + warning."
+
+  - id: R-VIZ-22
+    family: R-VIZ
+    name: "Gantt bar / waterfall / pareto"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.6, §5.10, §4.5"
+      xml_element: "mark + encodings"
+      xml_predicate: "bar + running sum + dual axis combinations"
+    omni_target:
+      spec_section: "Omni §8.11"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "Vega-Lite layered"
+    default_mapping:
+      strategy: vega_lite_layered
+      summary: "Composable templates. Gantt uses x + x2. Waterfall uses bar with y + y2. Pareto layers bar + running-sum line."
+      example: |
+        visType: vegalite
+        spec:
+          layer:
+            - mark: bar
+              encoding: { x: { field: start }, x2: { field: end } }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Chart shape matches reference image."
+    notes: "Missing start/end pair emits warning."
+
+  - id: R-VIZ-23
+    family: R-VIZ
+    name: "Box-and-whisker"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Box Plot'"
+    omni_target:
+      spec_section: "Omni §8.1"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "visType: basic, mark.type: boxplot"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Direct."
+      example: |
+        visType: basic
+        mark: { type: boxplot }
+    guardrails_consumed: []
+    failure_mode: passthrough
+    verification: "Quartile boundaries match."
+
+  - id: R-VIZ-24
+    family: R-VIZ
+    name: "Histogram (Show Me)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.8, §5.6"
+      xml_element: "bin dimension + bar mark"
+      xml_predicate: "presence of both"
+    omni_target:
+      spec_section: "Omni §3, §8.5"
+      file_pattern: "views/*.view + dashboards/*.dashboard"
+      yaml_path: "binned dim via R-DERIVED-05 + bar tile"
+    default_mapping:
+      strategy: bin_native
+      summary: "Two-stage emission. Emit a binned dimension via R-DERIVED-05, then bar tile."
+      example: |
+        # Stage 1: dimensions.amount_bin per R-DERIVED-05
+        # Stage 2: visType: basic, mark.type: bar
+    guardrails_consumed: []
+    failure_mode: reject
+    verification: "Bin counts match Tableau histogram."
+    notes: "Bin size 0 demotes to R-DERIVED-05 handler."
+
+  - id: R-VIZ-25
+    family: R-VIZ
+    name: "Sparkline"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "line mark in small cell context"
+    omni_target:
+      spec_section: "Omni §8.8, §8.10"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "omni-kpi chart row OR markdown Sparkline"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "KPI chart row is the cleaner path."
+      example: |
+        visType: omni-kpi
+        spec:
+          rows:
+            - { type: number, field: view.sales, format: USDCURRENCY }
+            - { type: chart, field: view.sales, x: view.month, shape: line, height: 30 }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Sparkline renders inside KPI tile."
+
+  - id: R-VIZ-26
+    family: R-VIZ
+    name: "Bullet chart"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.6 (Show Me)"
+      xml_element: "bar + reference + comparison"
+      xml_predicate: "Show Me 'bullet' combination"
+    omni_target:
+      spec_section: "Omni §8.8"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "omni-kpi progress row"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "KPI progress with field and target; loses comparison-band fidelity."
+      example: |
+        visType: omni-kpi
+        spec:
+          rows:
+            - { type: progress, field: view.actual, target: view.goal }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Target line appears."
+    notes: "Comparison band required emits warning."
+
+  - id: R-VIZ-27
+    family: R-VIZ
+    name: "Polygon (custom spatial)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Polygon' with path shelf"
+    omni_target:
+      spec_section: "Omni §8.11"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "Vega-Lite geoshape"
+    default_mapping:
+      strategy: vega_lite_escape
+      summary: "Vega-Lite spec with mark: 'geoshape' and bound spatial field."
+      example: |
+        visType: vegalite
+        spec:
+          mark: geoshape
+          encoding: { shape: { field: geom } }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Polygon renders."
+    notes: "Point-pair source data (not GeoJSON) emits warning."
+
+  - id: R-VIZ-28
+    family: R-VIZ
+    name: "Mark Automatic"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.6"
+      xml_element: "mark"
+      xml_predicate: "@class='Automatic'"
+    omni_target:
+      spec_section: "Omni §7, §11.6"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "automaticVis + concrete visType"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Emit automaticVis: true AND a concrete fallback visType matching Tableau's auto-picker choice."
+      example: |
+        automaticVis: true
+        visType: basic
+        mark: { type: bar }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "User reviews mark choice."
+    notes: "Tableau auto-pick rules may differ from Omni; emits warning."
+
+  - id: R-VIZ-29
+    family: R-VIZ
+    name: "Color encoding (discrete / continuous / diverging / stepped)"
+    bucket: YELLOW/GREY
+    tableau_source:
+      spec_section: "TWBX §5.7, §5.13"
+      xml_element: "encoding"
+      xml_predicate: "@shelf='color' with map-color-discrete or map-color-continuous"
+    omni_target:
+      spec_section: "Omni §8.13, §8.14"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "visConfig.colors[] / seriesColors / colorScale"
+    default_mapping:
+      strategy: palette_inline
+      summary: "Discrete walks map-color-discrete and emits colors[]. Continuous uses Vega-Lite color scale when Omni key unverified."
+      example: |
+        visConfig:
+          colors: ["#1f77b4", "#ff7f0e", "#2ca02c"]
+    guardrails_consumed: [custom_palette_handling]
+    failure_mode: warn_and_drop
+    verification: "Series colors match Tableau worksheet."
+    notes: "Named palette without inline colors falls back to hardcoded hex from tableau-20.xml defaults."
+
+  # === R-FILTER: Filters (13 rules) ===
+
+  - id: R-FILTER-01
+    family: R-FILTER
+    name: "Categorical multi-select / single-select / exclude"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.3, §9.1"
+      xml_element: "filter"
+      xml_predicate: "@class='categorical' with groupfilter @function='union|exclude'"
+    omni_target:
+      spec_section: "Omni §9.1, §9.2"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "filters.<field>"
+    default_mapping:
+      strategy: omni_filter
+      summary: "kind: STRING_IS plus values: [] plus optional is_negative: true."
+      example: |
+        sf_opportunities.stage_name:
+          kind: STRING_IS
+          type: string
+          values: ["Closed Won", "Negotiation"]
+          is_negative: false
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Filtered row count matches Tableau worksheet."
+    notes: "Values exceeding wire size limit emit warning, recommend server-side filter view."
+
+  - id: R-FILTER-02
+    family: R-FILTER
+    name: "Wildcard (contains, starts, ends, regex)"
+    bucket: GREEN/YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.3"
+      xml_element: "filter"
+      xml_predicate: "@class='wildcard' @match-pattern with criteria @match-type"
+    omni_target:
+      spec_section: "Omni §9.2"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "filters.<field>.kind"
+    default_mapping:
+      strategy: omni_filter
+      summary: "Direct enum map. Regex kind on JSON wire side is GREY; verify via export."
+      example: |
+        view.name:
+          kind: STRING_CONTAINS
+          type: string
+          values: ["example"]
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Pattern match count matches Tableau."
+    notes: "Contains/starts/ends/exactly GREEN; regex YELLOW."
+
+  - id: R-FILTER-03
+    family: R-FILTER
+    name: "Quantitative range"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.3"
+      xml_element: "filter"
+      xml_predicate: "@class='quantitative' @include-values='in-range' with min, max"
+    omni_target:
+      spec_section: "Omni §9.2"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "filters.<field>.kind"
+    default_mapping:
+      strategy: omni_filter
+      summary: "kind: BETWEEN (inclusive) or WITHIN_RANGE."
+      example: |
+        view.amount:
+          kind: BETWEEN
+          type: number
+          values: [1000, 50000]
+          is_negative: false
+    guardrails_consumed: []
+    failure_mode: best_effort
+    verification: "Filtered row count matches."
+    notes: "Open-ended range uses GREATER_THAN_OR_EQUAL_TO or LESS_THAN_OR_EQUAL_TO."
+
+  - id: R-FILTER-04
+    family: R-FILTER
+    name: "Date range (calendar)"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.3"
+      xml_element: "filter"
+      xml_predicate: "@class='quantitative' on date column with min, max"
+    omni_target:
+      spec_section: "Omni §9.2"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "filters.<field>.kind"
+    default_mapping:
+      strategy: omni_filter
+      summary: "kind: WITHIN_RANGE, type: date. Direct."
+      example: |
+        view.closedate:
+          kind: WITHIN_RANGE
+          type: date
+          values: ["2024-01-01", "2024-12-31"]
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Row count matches."
+    notes: "Time zone ambiguity defaults to warehouse-local with warning if Tableau-set TZ differs."
+
+  - id: R-FILTER-05
+    family: R-FILTER
+    name: "Relative date"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.3"
+      xml_element: "filter"
+      xml_predicate: "@class='relative-date' @first-period, @last-period, @period-type"
+    omni_target:
+      spec_section: "Omni §9.2"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "filters.<field>.kind"
+    default_mapping:
+      strategy: omni_filter
+      summary: "Always TIME_FOR_INTERVAL_DURATION (the JSON form of YAML time_for_duration). The UI picker is chosen by the shape of left_side/right_side. Symmetric [N units ago, N units] renders as 'in the past N'. Asymmetric [offset ago, length] renders as offset range."
+      example: |
+        # last-period=0 case ("in the past 4 months"):
+        view.closedate:
+          kind: TIME_FOR_INTERVAL_DURATION
+          type: date
+          left_side: "4 months ago"
+          right_side: "4 months"
+          is_negative: false
+        # last-period<0 case (offset window):
+        view.closedate:
+          kind: TIME_FOR_INTERVAL_DURATION
+          type: date
+          left_side: "6 months ago"
+          right_side: "4 months"
+          is_negative: false
+    guardrails_consumed: []
+    failure_mode: passthrough
+    verification: "Relative window updates as expected; UI picker matches the Tableau 'Relative dates' dialog's intended shape."
+    notes: |
+      Date-literal semantics: "N units ago" resolves to INTERVAL '-(N-1) unit' truncated. "N complete units ago" resolves to INTERVAL '-N unit'. So [12 months ago, 12 months] covers 12 calendar months ending at the current month.
+      Off-by-one trap: using abs(first) on the left (e.g. "11 months ago" for first=-11, last=0) yields the same data window but the wrong UI picker (range, not "in the past N"). Always emit period_count on both sides for the symmetric pattern.
+      Do NOT emit TIME_FOR_UNIT_DURATION. The dashboards-filter PATCH API accepts it but the query planner rejects it with "Invalid literal value". Full date-kind enum surfaced via 400: IS_ON_DAY_OF_WEEK, IS_ON_DAY_OF_QUARTER, IS_IN_MONTH_OF_YEAR, IS_ON_DAY_OF_YEAR, IS_AT_HOUR_OF_DAY, IS_IN_QUARTER_OF_YEAR, IS_IN_WEEK_OF_YEAR, IS_ON_DAY_OF_MONTH, BETWEEN, ON_OR_AFTER, BEFORE, TIME_FOR_INTERVAL_DURATION, TIME_FOR_UNIT_DURATION, QUERY_OFFSET.
+
+  - id: R-FILTER-06
+    family: R-FILTER
+    name: "Top-N filter"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.3"
+      xml_element: "groupfilter"
+      xml_predicate: "@function='end' @direction='TOP' @n"
+    omni_target:
+      spec_section: "Omni §7.1, §9"
+      file_pattern: "views/*.view + dashboards/*.dashboard"
+      yaml_path: "hidden rank dim + numeric filter"
+    default_mapping:
+      strategy: omni_filter
+      summary: "Emit hidden rank dimension (R-CALC-09) plus a numeric LESS_THAN_OR_EQUAL_TO filter."
+      example: |
+        dimensions:
+          customer_sales_rank:
+            sql: RANK() OVER (ORDER BY ${TABLE}.total_sales DESC)
+            type: number
+            hidden: true
+        # filters: { view.customer_sales_rank: { kind: LESS_THAN_OR_EQUAL_TO, values: [10] } }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Result has exactly 10 rows."
+    notes: "Calculated-measure ranking field materializes via derived_table."
+
+  - id: R-FILTER-07
+    family: R-FILTER
+    name: "Conditional filter (formula-based)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.3"
+      xml_element: "filter"
+      xml_predicate: "@class='condition' with condition/expression"
+    omni_target:
+      spec_section: "Omni §9.6"
+      file_pattern: "views/*.view + dashboards/*.dashboard"
+      yaml_path: "hidden boolean dim + filter"
+    default_mapping:
+      strategy: omni_filter
+      summary: "Rewrite expression as SQL on a hidden boolean dimension; filter on that dimension."
+      example: |
+        dimensions:
+          high_value_flag:
+            sql: CASE WHEN ${TABLE}.amount > 10000 THEN true ELSE false END
+            type: yesno
+            hidden: true
+    guardrails_consumed: []
+    failure_mode: best_effort
+    verification: "Filtered count matches Tableau."
+    notes: "Aggregation reference uses Omni measure-level filters."
+
+  - id: R-FILTER-08
+    family: R-FILTER
+    name: "Context filter"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §5.3"
+      xml_element: "filter"
+      xml_predicate: "@context='true'"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none (concept evaporates)"
+    default_mapping:
+      strategy: omit_silent
+      summary: "Drop with note. FIXED LODs are materialized as derived tables (R-CALC-04), so context filter's purpose disappears."
+      example: |
+        # Context filter dropped silently. FIXED LODs are materialized
+        # upstream, so the original intent is preserved by R-CALC-04.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Filter not present in Omni output; row counts still correct."
+
+  - id: R-FILTER-09
+    family: R-FILTER
+    name: "Cross-datasource filter"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.3"
+      xml_element: "filters-with-target"
+      xml_predicate: "per-target field references"
+    omni_target:
+      spec_section: "Omni §9.3"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "filterConfig with shared field name"
+    default_mapping:
+      strategy: omni_filter
+      summary: "Works only when both topics expose a shared dimension name. Use topic joins aliases to enforce naming."
+      example: |
+        filterConfig:
+          region:
+            scope: [topic_a, topic_b]
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Filter applies to both tiles."
+    notes: "Unenforceable shared field name emits warning."
+
+  - id: R-FILTER-10
+    family: R-FILTER
+    name: "Only relevant values / cascading"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §5.3"
+      xml_element: "filter"
+      xml_predicate: "@user:ui-marker='cascade'"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none automatic"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Drop. Manual scope of filter options requires per-filter query and is heavy."
+      example: |
+        # WARNING: cascading 'only relevant values' dropped.
+        # Manual scope per filter is too heavy to auto-migrate.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  - id: R-FILTER-11
+    family: R-FILTER
+    name: "Show apply button"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX (UI)"
+      xml_element: "window"
+      xml_predicate: "apply-button flag"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none (Omni applies live)"
+    default_mapping:
+      strategy: omit_silent
+      summary: "Drop silently."
+      example: |
+        # Apply-button flag dropped. Omni applies filters live.
+    guardrails_consumed: []
+    failure_mode: passthrough
+    verification: "Filter behavior is reactive."
+
+  - id: R-FILTER-12
+    family: R-FILTER
+    name: "Datasource filter"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §9.1"
+      xml_element: "datasource/filter"
+      xml_predicate: "datasource-level filter"
+    omni_target:
+      spec_section: "Omni §4.3"
+      file_pattern: "topics/*.topic"
+      yaml_path: "always_where_filters"
+    default_mapping:
+      strategy: omni_filter
+      summary: "always_where_filters on topic."
+      example: |
+        always_where_filters:
+          view.is_deleted:
+            is: false
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Topic queries exclude filtered rows."
+    notes: "Filter referencing nonexistent dimension emits warning."
+
+  - id: R-FILTER-13
+    family: R-FILTER
+    name: "Extract filter"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.12"
+      xml_element: "extract/filter"
+      xml_predicate: "extract-level filter"
+    omni_target:
+      spec_section: "n/a (dbt or upstream)"
+      file_pattern: "n/a"
+      yaml_path: "warehouse view or dbt model"
+    default_mapping:
+      strategy: precompute_upstream
+      summary: "Emit warning recommending the filter be moved into a warehouse view or dbt model."
+      example: |
+        # WARNING: extract filter dropped. Move into warehouse view or dbt model.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  # === R-COLOR: Palettes and color encoding (4 rules) ===
+
+  - id: R-COLOR-01
+    family: R-COLOR
+    name: "Custom categorical palette"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §2.2"
+      xml_element: "color-palette"
+      xml_predicate: "@type='regular' with color children"
+    omni_target:
+      spec_section: "Omni §8.14"
+      file_pattern: "model.yaml or dashboards/*.dashboard"
+      yaml_path: "visConfig.colors[] or ai_settings palette"
+    default_mapping:
+      strategy: palette_theme
+      summary: "Walk colors in order, emit hex array. If emit_brand_theme, write once to model ai_settings and reference per tile."
+      example: |
+        visConfig:
+          colors: ["#0a2540", "#ff6b6b", "#ffe66d"]
+    guardrails_consumed: [custom_palette_handling]
+    failure_mode: best_effort
+    verification: "Tile colors match Tableau worksheet."
+    notes: "Palette with fewer colors than series cycles."
+
+  - id: R-COLOR-02
+    family: R-COLOR
+    name: "Custom sequential / diverging palette"
+    bucket: GREY
+    tableau_source:
+      spec_section: "TWBX §2.2"
+      xml_element: "color-palette"
+      xml_predicate: "@type='ordered-sequential|ordered-diverging'"
+    omni_target:
+      spec_section: "Omni §8.14"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "visConfig.colorScale"
+    default_mapping:
+      strategy: vega_lite_escape
+      summary: "Emit Vega-Lite color scale with explicit start/end hex when Omni key unverified."
+      example: |
+        spec:
+          encoding:
+            color:
+              scale: { range: ["#fff5f5", "#a00000"] }
+    guardrails_consumed: [custom_palette_handling]
+    failure_mode: warn_and_drop
+    verification: "Gradient shape matches."
+    notes: "Gradient with >3 stops emits warning."
+
+  - id: R-COLOR-03
+    family: R-COLOR
+    name: "Workbook-level theme (org-level)"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §2.3"
+      xml_element: "style"
+      xml_predicate: "workbook-level style block"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none at model level"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Drop with warning. Roadmap candidate."
+      example: |
+        # WARNING: workbook-level theme dropped. No model-level equivalent in Omni.
+    guardrails_consumed: [custom_palette_handling]
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  - id: R-COLOR-04
+    family: R-COLOR
+    name: "Conditional formatting on text table"
+    bucket: YELLOW/GREY
+    tableau_source:
+      spec_section: "TWBX §8.3"
+      xml_element: "style-rule/condition"
+      xml_predicate: "table-view styling rule"
+    omni_target:
+      spec_section: "Omni §8.7"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "resultConfig.columnFormats"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Static per-column color emits directly. Per-row conditional logic requires explicit SQL helper column or heavy Vega-Lite workaround."
+      example: |
+        resultConfig:
+          columnFormats:
+            view.profit: { format: "$#,##0", color: "#1b5e20" }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Cell color matches Tableau."
+    notes: "Static YELLOW; per-row logic GREY. Aggregation-referencing conditions emit warning."
+
+  # === R-DASH: Dashboards (11 rules) ===
+
+  - id: R-DASH-01
+    family: R-DASH
+    name: "Tiled layout (root)"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §6.1, §6.2"
+      xml_element: "dashboard/zones"
+      xml_predicate: "root zones tree"
+    omni_target:
+      spec_section: "Omni §6.3"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "metadata.layouts.lg"
+    default_mapping:
+      strategy: dashboard_zone_grid
+      summary: "Flatten zone tree to grid cells via the algorithm in audit 5.19."
+      example: |
+        metadata:
+          layouts:
+            lg:
+              - { i: "1", x: 0, y: 0, w: 6, h: 4 }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Every tile fits inside 12 columns and does not overlap."
+    notes: "Overlapping or zero-area zones skipped with warning."
+
+  - id: R-DASH-02
+    family: R-DASH
+    name: "Floating layout (absolute pixels)"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §6.4"
+      xml_element: "zone"
+      xml_predicate: "@floating='true' @x, @y, @w, @h"
+    omni_target:
+      spec_section: "n/a (grid-only)"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "metadata.layouts.lg (snapped)"
+    default_mapping:
+      strategy: dashboard_zone_floating_snap
+      summary: "Snap to nearest grid cell using R-DASH-01 algorithm."
+      example: |
+        # Floating zone @ (130px, 220px) -> grid cell { x: 2, y: 3, w: 4, h: 3 }
+    guardrails_consumed: [floating_zone_handling]
+    failure_mode: warn_and_drop
+    verification: "Tile lands at expected grid position."
+    notes: "Overlap with tiled zone emits warning, keeps tiled."
+
+  - id: R-DASH-03
+    family: R-DASH
+    name: "Container (horizontal / vertical flow)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §6.2"
+      xml_element: "zone"
+      xml_predicate: "@container-type='horizontal|vertical'"
+    omni_target:
+      spec_section: "Omni §6.3"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "metadata.layouts.lg"
+    default_mapping:
+      strategy: dashboard_zone_grid
+      summary: "Flatten flow into explicit grid positions. Loses dynamic re-flow."
+      example: |
+        # Horizontal container with 3 children -> 3 tiles at same y, increasing x.
+    guardrails_consumed: [floating_zone_handling]
+    failure_mode: warn_and_drop
+    verification: "Visual review."
+    notes: "Nested containers > 3 deep emit warning."
+
+  - id: R-DASH-04
+    family: R-DASH
+    name: "Sizing (fixed / automatic / range)"
+    bucket: GREEN/YELLOW
+    tableau_source:
+      spec_section: "TWBX §6.1"
+      xml_element: "size"
+      xml_predicate: "@value='WxH' or @sizing-mode='automatic'"
+    omni_target:
+      spec_section: "Omni §6.3"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "responsive grid"
+    default_mapping:
+      strategy: omit_silent
+      summary: "Drop pixel dimensions; rely on Omni responsive grid."
+      example: |
+        # Pixel-fixed size '800,600' dropped. Omni responsive.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Dashboard fits on screen at standard sizes."
+    notes: "Auto GREEN; fixed YELLOW; range RED. Specific aspect ratio designs emit warning."
+
+  - id: R-DASH-05
+    family: R-DASH
+    name: "Worksheet zone"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §6.2"
+      xml_element: "zone"
+      xml_predicate: "@type-v2='worksheet' @name"
+    omni_target:
+      spec_section: "Omni §6.2, §7"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "queryPresentation tile in metadata.layouts.lg"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "One worksheet to one tile. Worksheet definition feeds queryJson and visConfig."
+      example: |
+        # zone type=worksheet name=Sales by Region
+        # -> queryPresentation tile with that worksheet's queryJson and visConfig.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Tile renders."
+    notes: "Unsupported mark demotes tile with warning."
+
+  - id: R-DASH-06
+    family: R-DASH
+    name: "Text / image / web / blank zones"
+    bucket: GREEN/YELLOW
+    tableau_source:
+      spec_section: "TWBX §6.2"
+      xml_element: "zone"
+      xml_predicate: "@type-v2='text|image|web|blank'"
+    omni_target:
+      spec_section: "Omni §6.6"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "metadata.textTiles[]"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Text emits markdown directly. Image must be externally hosted. Web emits iframe (JS stripped). Blank leaves a gap."
+      example: |
+        textTiles:
+          - { i: "1", spec: { markdown: "# Sales Overview" } }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Tile renders."
+    notes: "Text/blank GREEN; image/web YELLOW. TWBX-embedded image without external URL emits warning."
+
+  - id: R-DASH-07
+    family: R-DASH
+    name: "Extension zone (.trex)"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §6.2"
+      xml_element: "zone"
+      xml_predicate: "@type-v2='extension' plus .trex config"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Drop with explicit warning naming the extension."
+      example: |
+        # WARNING: .trex extension '<name>' dropped. No Omni equivalent.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  - id: R-DASH-08
+    family: R-DASH
+    name: "Show / hide containers"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §6.2 (UI only)"
+      xml_element: "show-hide button widget"
+      xml_predicate: "presence"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Drop with warning."
+      example: |
+        # WARNING: show/hide container dropped.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  - id: R-DASH-09
+    family: R-DASH
+    name: "Dashboard filter applied to multiple sheets"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §6.5"
+      xml_element: "filters-with-target"
+      xml_predicate: "dashboard-level filter scope"
+    omni_target:
+      spec_section: "Omni §9.3, §9.5"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "filterConfig"
+    default_mapping:
+      strategy: omni_filter
+      summary: "Emit a single filterConfig entry; let Omni auto-apply to tiles using that field."
+      example: |
+        filterConfig:
+          region: { default_scope: all_tiles_using_field }
+    guardrails_consumed: [multi_tab_handling]
+    failure_mode: warn_and_drop
+    verification: "All targeted tiles filter together."
+    notes: "Field name differs across topics uses R-FILTER-09 fix."
+
+  - id: R-DASH-10
+    family: R-DASH
+    name: "Multi-tab (from stories or multi-sheet dashboards)"
+    bucket: GREY
+    tableau_source:
+      spec_section: "TWBX §7"
+      xml_element: "story/story-points or multiple dashboards"
+      xml_predicate: "multi-sheet structure"
+    omni_target:
+      spec_section: "Omni §6.4"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "multi-tab JSON or separate dashboards"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "With separate_dashboards, emit one dashboard per story point or sheet, plus cross-dashboard navigation buttons."
+      example: |
+        # multi_tab_handling: separate_dashboards
+        # dashboard_001.dashboard: tab 1 content
+        # dashboard_002.dashboard: tab 2 content
+        # + markdown nav buttons linking between them.
+    guardrails_consumed: [multi_tab_handling]
+    failure_mode: warn_and_drop
+    verification: "Each dashboard renders independently."
+    notes: "Per-tab frozen filter state is GREY."
+
+  - id: R-DASH-11
+    family: R-DASH
+    name: "Device-specific layouts (phone, tablet)"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §6.1"
+      xml_element: "device-layouts/device-layout"
+      xml_predicate: "@device='phone|tablet'"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none device-conditioned"
+    default_mapping:
+      strategy: omit_silent
+      summary: "Drop device layouts, keep only desktop. Rely on Omni responsive grid."
+      example: |
+        # Phone/tablet layouts dropped. Omni uses one responsive layout.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Dashboard renders on mobile via Omni's responsive grid."
+
+  # === R-ACTION: Dashboard actions (6 rules) ===
+
+  - id: R-ACTION-01
+    family: R-ACTION
+    name: "Filter action (click to filter)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §6.6"
+      xml_element: "filter-action"
+      xml_predicate: "presence"
+    omni_target:
+      spec_section: "Omni §6.5"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "dashboard.crossfilterEnabled"
+    default_mapping:
+      strategy: action_filter_native
+      summary: "Enable crossfilter at dashboard level. Per-tile filter override (tileFilterMap) is GREY."
+      example: |
+        crossfilterEnabled: true
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Clicking in one tile filters another (manual)."
+    notes: "Source-to-target field mapping documented but not auto-emitted."
+
+  - id: R-ACTION-02
+    family: R-ACTION
+    name: "Highlight action"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §6.6"
+      xml_element: "highlight-action"
+      xml_predicate: "presence"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: action_drop
+      summary: "Drop with warning, or substitute crossfilter if highlight_action_handling: crossfilter_substitute."
+      example: |
+        # WARNING: highlight action dropped. Optionally substitute with crossfilter.
+    guardrails_consumed: [highlight_action_handling]
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  - id: R-ACTION-03
+    family: R-ACTION
+    name: "URL action"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §6.6"
+      xml_element: "url-action"
+      xml_predicate: "url with field tokens"
+    omni_target:
+      spec_section: "Omni §3.2, §6.6"
+      file_pattern: "views/*.view or markdown tile"
+      yaml_path: "dimension.link or markdown link"
+    default_mapping:
+      strategy: action_url
+      summary: "Dimension link: is the cleaner path."
+      example: |
+        dimensions:
+          region:
+            sql: ${TABLE}.REGION
+            link:
+              url: "https://my.salesforce.com/{{ value }}"
+              label: "Open in Salesforce"
+    guardrails_consumed: []
+    failure_mode: best_effort
+    verification: "Link opens with expected URL."
+    notes: "URL referencing field not bound to row uses {{ row.<view.field> }} template."
+
+  - id: R-ACTION-04
+    family: R-ACTION
+    name: "Navigation action (go to dashboard)"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §6.6"
+      xml_element: "navigation-action"
+      xml_predicate: "@target-dashboard"
+    omni_target:
+      spec_section: "Omni §6.5, §6.6"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "markdown tile with link"
+    default_mapping:
+      strategy: action_navigation
+      summary: "Emit a markdown tile with a button-styled link. JSON shape is GREY."
+      example: |
+        textTiles:
+          - { spec: { markdown: "[Open Detail Dashboard](/dashboards/<id>)" } }
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Link navigates."
+    notes: "Unresolvable target dashboard ID emits warning with placeholder."
+
+  - id: R-ACTION-05
+    family: R-ACTION
+    name: "Parameter action"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §6.6"
+      xml_element: "parameter-action"
+      xml_predicate: "presence"
+    omni_target:
+      spec_section: "n/a (Omni §9.5 GREY)"
+      file_pattern: "n/a"
+      yaml_path: "none direct"
+    default_mapping:
+      strategy: action_drop
+      summary: "Drop with warning. Suggest manual filter as substitute."
+      example: |
+        # WARNING: parameter action dropped. Suggest manual filter substitution.
+    guardrails_consumed: [parameter_handling]
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  - id: R-ACTION-06
+    family: R-ACTION
+    name: "Set action"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §6.6"
+      xml_element: "set-action"
+      xml_predicate: "presence"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: action_drop
+      summary: "Drop with warning."
+      example: |
+        # WARNING: set action dropped. No Omni equivalent.
+    guardrails_consumed: [set_action_handling]
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  # === R-STORY: Stories (5 rules) ===
+
+  - id: R-STORY-01
+    family: R-STORY
+    name: "Story container"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §7"
+      xml_element: "story"
+      xml_predicate: "presence"
+    omni_target:
+      spec_section: "Omni §6.4"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "multi-tab or sequence of linked dashboards"
+    default_mapping:
+      strategy: story_separate_dashboards
+      summary: "See R-DASH-10. Default to separate dashboards."
+      example: |
+        # Story container -> N dashboards under multi_tab_handling: separate_dashboards.
+    guardrails_consumed: [multi_tab_handling]
+    failure_mode: warn_and_drop
+    verification: "Navigation path matches Tableau story."
+    notes: "Inter-point dependencies emit warning."
+
+  - id: R-STORY-02
+    family: R-STORY
+    name: "Story point"
+    bucket: GREY
+    tableau_source:
+      spec_section: "TWBX §7"
+      xml_element: "story-points/story-point"
+      xml_predicate: "presence"
+    omni_target:
+      spec_section: "Omni §6.4"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "one tab in multi-tab dashboard"
+    default_mapping:
+      strategy: story_separate_dashboards
+      summary: "Under separate_dashboards, one story point becomes one dashboard."
+      example: |
+        # story-point[0] -> dashboard_001
+        # story-point[1] -> dashboard_002
+    guardrails_consumed: [multi_tab_handling]
+    failure_mode: warn_and_drop
+    verification: "Each point renders."
+    notes: "Resolution: build 2-tab dashboard in Omni UI, export, copy structure (audit 7.1)."
+
+  - id: R-STORY-03
+    family: R-STORY
+    name: "Frozen filter state per story point"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §7"
+      xml_element: "story-point/filter"
+      xml_predicate: "point-level overrides"
+    omni_target:
+      spec_section: "Omni §9.3"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "per-tab default filterConfig"
+    default_mapping:
+      strategy: omni_filter
+      summary: "Under separate_dashboards, encode filter state in each dashboard's default filterConfig."
+      example: |
+        # dashboard_001 default filterConfig: { region: West }
+        # dashboard_002 default filterConfig: { region: East }
+    guardrails_consumed: [multi_tab_handling]
+    failure_mode: warn_and_drop
+    verification: "Dashboard opens with expected filters applied."
+
+  - id: R-STORY-04
+    family: R-STORY
+    name: "Navigator style"
+    bucket: GREY/RED
+    tableau_source:
+      spec_section: "TWBX §7"
+      xml_element: "story"
+      xml_predicate: "@navigator-style='dot|caption|number|arrows-only'"
+    omni_target:
+      spec_section: "n/a (Omni tab UI variants not enumerated)"
+      file_pattern: "n/a"
+      yaml_path: "Omni default"
+    default_mapping:
+      strategy: omit_silent
+      summary: "Drop style preference; use Omni default tab UI."
+      example: |
+        # Navigator-style preference dropped. Omni uses default tab UI.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning appears for unsupported styles (number, arrows-only)."
+    notes: "Dot/caption GREY; number/arrows-only RED."
+
+  - id: R-STORY-05
+    family: R-STORY
+    name: "Annotations on story points"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §7"
+      xml_element: "story-point/caption + formatted-text"
+      xml_predicate: "caption with rich text"
+    omni_target:
+      spec_section: "Omni §6.6"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "markdown tile per tab/dashboard"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Emit a markdown tile at top of each tab/dashboard with the caption as the title."
+      example: |
+        textTiles:
+          - { spec: { markdown: "# Story Point 1 Caption" } }
+    guardrails_consumed: []
+    failure_mode: best_effort
+    verification: "Caption appears."
+    notes: "Rich formatting collapses to plain text."
+
+  # === R-FORMAT: Numbers, dates, fonts, banding (8 rules) ===
+
+  - id: R-FORMAT-01
+    family: R-FORMAT
+    name: "Number format strings (Excel-like)"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §8.4"
+      xml_element: "format"
+      xml_predicate: "Excel-style format string"
+    omni_target:
+      spec_section: "Omni §3.4, §8.13"
+      file_pattern: "views/*.view or dashboards/*.dashboard"
+      yaml_path: "format or value_format"
+    default_mapping:
+      strategy: format_string_passthrough
+      summary: "Direct paste, Excel-compatible."
+      example: |
+        format: "#,##0.00;-#,##0"
+    guardrails_consumed: [format_string_dialect]
+    failure_mode: best_effort
+    verification: "Rendered cell matches Tableau."
+    notes: "Tableau-specific tokens translate via R-FORMAT-02."
+
+  - id: R-FORMAT-02
+    family: R-FORMAT
+    name: "Format string shortcuts"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §8.4"
+      xml_element: "format"
+      xml_predicate: "@default-format='c0|p1%|n2|s'"
+    omni_target:
+      spec_section: "Omni §3.4"
+      file_pattern: "views/*.view"
+      yaml_path: "format (Excel string or named)"
+    default_mapping:
+      strategy: format_string_best_effort
+      summary: "Lookup table maps shortcuts to long-form Excel strings."
+      example: |
+        # Tableau -> Omni format
+        # c0   -> "$#,##0"
+        # c2   -> "$#,##0.00"
+        # n0   -> "#,##0"
+        # n2   -> "#,##0.00"
+        # p0%  -> "0%"
+        # p1%  -> "0.0%"
+        # p2%  -> "0.00%"
+        # s    -> "0.00E+00"
+    guardrails_consumed: [format_string_dialect]
+    failure_mode: best_effort
+    verification: "Rendered cell matches Tableau."
+    notes: "Unknown shortcut emits best-guess plus warning."
+
+  - id: R-FORMAT-03
+    family: R-FORMAT
+    name: "Date format strings"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §8.4"
+      xml_element: "format"
+      xml_predicate: "date format token string"
+    omni_target:
+      spec_section: "Omni §3.4"
+      file_pattern: "views/*.view"
+      yaml_path: "format"
+    default_mapping:
+      strategy: format_string_passthrough
+      summary: "Pass through."
+      example: |
+        format: "yyyy-MM-dd"
+    guardrails_consumed: [format_string_dialect]
+    failure_mode: best_effort
+    verification: "Rendered date matches."
+    notes: "Locale-specific tokens (e.g., MMM short month) documented."
+
+  - id: R-FORMAT-04
+    family: R-FORMAT
+    name: "Custom format with conditional sections"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §8.4"
+      xml_element: "format"
+      xml_predicate: "@format='[Red]<0;[Green]>=0'"
+    omni_target:
+      spec_section: "Omni §3.4"
+      file_pattern: "views/*.view"
+      yaml_path: "value_format"
+    default_mapping:
+      strategy: format_string_passthrough
+      summary: "Pass through."
+      example: |
+        value_format: "[Red]<0;[Green]>=0"
+    guardrails_consumed: [format_string_dialect]
+    failure_mode: best_effort
+    verification: "Positive vs negative colors match."
+    notes: "Aggregation references demote to R-COLOR-04."
+
+  - id: R-FORMAT-05
+    family: R-FORMAT
+    name: "Fonts and per-mark font sizing"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §8.6"
+      xml_element: "font"
+      xml_predicate: "@name, @size"
+    omni_target:
+      spec_section: "Omni (dashboard-level only via spec)"
+      file_pattern: "n/a per-mark"
+      yaml_path: "none per-mark"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Drop per-mark fonts with warning. Keep workbook-level theme if present (RED, see R-COLOR-03)."
+      example: |
+        # WARNING: per-mark font '<name>' size <n> dropped. Omni styles tiles globally.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning lists every dropped font."
+
+  - id: R-FORMAT-06
+    family: R-FORMAT
+    name: "Row / column banding"
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §8.5"
+      xml_element: "band"
+      xml_predicate: "table view element"
+    omni_target:
+      spec_section: "Omni §8.7"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "resultConfig.rowBanding"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Direct."
+      example: |
+        resultConfig:
+          rowBanding: true
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Alternating rows render."
+    notes: "Custom band color emits warning, drops the color."
+
+  - id: R-FORMAT-07
+    family: R-FORMAT
+    name: "Borders and gridlines"
+    bucket: GREY
+    tableau_source:
+      spec_section: "TWBX §5.5, §8.5"
+      xml_element: "border"
+      xml_predicate: "styling element"
+    omni_target:
+      spec_section: "Omni §8.7"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "spreadsheet rendering defaults"
+    default_mapping:
+      strategy: omit_silent
+      summary: "Drop; emit warning only if borders are load-bearing for the tile."
+      example: |
+        # Borders dropped (non-load-bearing). Spreadsheet uses default rendering.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning appears if borders were load-bearing."
+
+  - id: R-FORMAT-08
+    family: R-FORMAT
+    name: "Dashboard background color / image"
+    bucket: GREY/YELLOW
+    tableau_source:
+      spec_section: "TWBX §2.3, §8.5"
+      xml_element: "style/format"
+      xml_predicate: "@attr='dashboard-bg-color' or bg-image"
+    omni_target:
+      spec_section: "Omni §6.6"
+      file_pattern: "dashboards/*.dashboard"
+      yaml_path: "markdown tile or per-tile"
+    default_mapping:
+      strategy: tile_passthrough
+      summary: "Emit a full-width markdown tile with <div> background if background-image is required. Otherwise drop."
+      example: |
+        textTiles:
+          - { spec: { markdown: "<div style='background: #fafafa;'>...</div>" } }
+    guardrails_consumed: [tooltip_handling]
+    failure_mode: warn_and_drop
+    verification: "Visual review."
+    notes: "Color GREY; image YELLOW. TWBX-embedded image must be externalized first."
+
+  # === R-OTHER: Misc (5 rules) ===
+
+  - id: R-OTHER-01
+    family: R-OTHER
+    name: "Mark annotations"
+    bucket: RED
+    tableau_source:
+      spec_section: "audit §3.9"
+      xml_element: "annotation"
+      xml_predicate: "not enumerated in TWBX spec sections shown"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Drop with warning."
+      example: |
+        # WARNING: mark annotation dropped. No Omni equivalent.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  - id: R-OTHER-02
+    family: R-OTHER
+    name: "Viz-in-tooltip"
+    bucket: RED
+    tableau_source:
+      spec_section: "audit §3.9"
+      xml_element: "interactive viz-in-tooltip feature"
+      xml_predicate: "not in TWBX spec sections shown"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Drop with warning."
+      example: |
+        # WARNING: viz-in-tooltip dropped. No Omni equivalent.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning appears."
+
+  - id: R-OTHER-03
+    family: R-OTHER
+    name: "Subscriptions / email alerts"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "audit §3.9 (Tableau Server feature)"
+      xml_element: "n/a (server-side)"
+      xml_predicate: "not in TWBX"
+    omni_target:
+      spec_section: "Omni §10"
+      file_pattern: "n/a"
+      yaml_path: "omni schedules CLI"
+    default_mapping:
+      strategy: manual_review
+      summary: "Re-create on Omni side, not migrated automatically. Emit a planning note."
+      example: |
+        # Subscription: rebuild manually via `omni schedules` CLI.
+    guardrails_consumed: []
+    failure_mode: manual_review
+    verification: "Manual."
+    notes: "Subscription config not visible from TWBX. Documented only."
+
+  - id: R-OTHER-04
+    family: R-OTHER
+    name: "Permissions"
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "audit §3.9 (Tableau Server feature)"
+      xml_element: "n/a (server-side)"
+      xml_predicate: "not in TWBX"
+    omni_target:
+      spec_section: "Omni §2, §3, §4"
+      file_pattern: "model/views/topics"
+      yaml_path: "access_grants, access_filters, required_access_grants"
+    default_mapping:
+      strategy: manual_review
+      summary: "Re-create on Omni side, not migrated."
+      example: |
+        # Permissions: rebuild manually using access_grants and access_filters.
+    guardrails_consumed: []
+    failure_mode: manual_review
+    verification: "Manual."
+
+  - id: R-OTHER-05
+    family: R-OTHER
+    name: "Workbook-level actions"
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §2.1"
+      xml_element: "workbook/actions"
+      xml_predicate: "presence"
+    omni_target:
+      spec_section: "n/a"
+      file_pattern: "n/a"
+      yaml_path: "none"
+    default_mapping:
+      strategy: drop_with_warning
+      summary: "Drop. Rare in practice."
+      example: |
+        # WARNING: workbook-level action dropped. Rare in practice.
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    verification: "Warning appears."

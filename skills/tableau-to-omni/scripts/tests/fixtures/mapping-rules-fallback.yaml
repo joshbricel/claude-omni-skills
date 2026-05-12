@@ -1,0 +1,563 @@
+version: "1.0"
+
+# Minimal fallback used by tests when the real sidecar has not yet landed.
+# Only the rules referenced by the test suite are included. The schema matches
+# the contract documented in the apply_rules.py task brief.
+
+guardrails:
+  lod_placement:
+    default: model_layer
+    options: [model_layer, workbook_layer, snowflake_view]
+    affects_rules: [R-CALC-04, R-CALC-05, R-CALC-06]
+    description: Where to materialize Tableau LOD expressions.
+  calculated_field_placement:
+    default: model_layer
+    options: [model_layer, workbook_layer]
+    affects_rules: [R-CALC-01, R-CALC-02, R-CALC-07, R-CALC-08, R-CALC-09]
+    description: Where to materialize non-LOD calculated fields.
+  floating_zone_handling:
+    default: snap_to_grid
+    options: [snap_to_grid, preserve_floating, reject_with_warning]
+    affects_rules: [R-DASH-04]
+    description: How to handle floating dashboard zones.
+
+rules:
+  - id: R-CALC-01
+    family: R-CALC
+    name: Arithmetic and math functions
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §4.1"
+      xml_element: column
+    omni_target:
+      file_pattern: "views/*.yaml"
+      yaml_path: "dimensions.<name>"
+    default_mapping:
+      strategy: model_layer_dimension
+    guardrails_consumed: [calculated_field_placement]
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-CALC-02
+    family: R-CALC
+    name: Logical (IF, IIF, CASE)
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §4.1"
+      xml_element: column
+    omni_target:
+      file_pattern: "views/*.yaml"
+      yaml_path: "dimensions.<name>"
+    default_mapping:
+      strategy: case_when_dimension
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-CALC-03
+    family: R-CALC
+    name: String / date / type functions
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §4.1"
+      xml_element: column
+    omni_target:
+      file_pattern: "views/*.yaml"
+      yaml_path: "dimensions.<name>"
+    default_mapping:
+      strategy: model_layer_dimension
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-CALC-04
+    family: R-CALC
+    name: LOD FIXED
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.3"
+    omni_target:
+      file_pattern: "views/*.yaml"
+      yaml_path: "measures.<name>"
+    default_mapping:
+      strategy: derived_table_cte
+      summary: FIXED LODs map to a CTE with GROUP BY.
+      example: "{FIXED [Region] : SUM([Sales])}"
+      alt_strategies:
+        lod_placement:
+          model_layer: derived_table_cte
+          workbook_layer: workbook_tile_calc
+          snowflake_view: snowflake_view
+    guardrails_consumed: [lod_placement]
+    failure_mode: warn_and_drop
+    notes: ""
+
+  - id: R-CALC-05
+    family: R-CALC
+    name: LOD INCLUDE
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.3"
+    omni_target:
+      file_pattern: "views/*.yaml"
+      yaml_path: "measures.<name>"
+    default_mapping:
+      strategy: model_layer_measure
+    guardrails_consumed: [lod_placement]
+    failure_mode: warn_and_drop
+    notes: ""
+
+  - id: R-CALC-06
+    family: R-CALC
+    name: LOD EXCLUDE
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.3"
+    omni_target:
+      file_pattern: "views/*.yaml"
+      yaml_path: "measures.<name>"
+    default_mapping:
+      strategy: model_layer_measure
+    guardrails_consumed: [lod_placement]
+    failure_mode: warn_and_drop
+    notes: ""
+
+  - id: R-CALC-07
+    family: R-CALC
+    name: Table calc RUNNING_*
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.2"
+    omni_target:
+      file_pattern: "views/*.yaml"
+      yaml_path: "measures.<name>"
+    default_mapping:
+      strategy: model_layer_measure
+    guardrails_consumed: [table_calc_placement]
+    failure_mode: warn_and_drop
+    notes: ""
+
+  - id: R-CALC-08
+    family: R-CALC
+    name: Table calc WINDOW_*
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.2"
+    omni_target:
+      file_pattern: "views/*.yaml"
+      yaml_path: "measures.<name>"
+    default_mapping:
+      strategy: model_layer_measure
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-CALC-09
+    family: R-CALC
+    name: Table calc RANK family
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.2"
+    omni_target:
+      file_pattern: "views/*.yaml"
+      yaml_path: "measures.<name>"
+    default_mapping:
+      strategy: model_layer_measure
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-CALC-10
+    family: R-CALC
+    name: Table calc INDEX / FIRST / LAST / SIZE
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.2"
+    omni_target:
+      file_pattern: "views/*.yaml"
+      yaml_path: "measures.<name>"
+    default_mapping:
+      strategy: model_layer_measure
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-CALC-12
+    family: R-CALC
+    name: Custom table calc
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §4.2"
+    omni_target:
+      file_pattern: "views/*.yaml"
+      yaml_path: "measures.<name>"
+    default_mapping:
+      strategy: model_layer_measure
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-VIZ-01
+    family: R-VIZ
+    name: Single-axis worksheet
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5"
+    omni_target:
+      file_pattern: "workbook.json"
+      yaml_path: "tiles[<name>]"
+    default_mapping:
+      strategy: tile_passthrough
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-VIZ-10
+    family: R-VIZ
+    name: Dual axis (synchronized)
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.4"
+    omni_target:
+      file_pattern: "workbook.json"
+      yaml_path: "tiles[<name>]"
+    default_mapping:
+      strategy: vega_lite_layered
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-VIZ-11
+    family: R-VIZ
+    name: Dual axis (independent)
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.4"
+    omni_target:
+      file_pattern: "workbook.json"
+      yaml_path: "tiles[<name>]"
+    default_mapping:
+      strategy: vega_lite_layered
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-VIZ-13
+    family: R-VIZ
+    name: Trellis / small multiples
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §5.5"
+    omni_target:
+      file_pattern: "workbook.json"
+      yaml_path: "tiles[<name>]"
+    default_mapping:
+      strategy: vega_lite_escape
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-DASH-01
+    family: R-DASH
+    name: Tiled layout (root)
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §6"
+    omni_target:
+      file_pattern: "dashboard.json"
+      yaml_path: "layout"
+    default_mapping:
+      strategy: dashboard_zone_grid
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-DASH-02
+    family: R-DASH
+    name: Floating layout (absolute pixels)
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §6.4"
+    omni_target:
+      file_pattern: "dashboard.json"
+      yaml_path: "layout"
+    default_mapping:
+      strategy: dashboard_zone_floating_snap
+      alt_strategies:
+        floating_zone_handling:
+          snap_to_grid: dashboard_zone_floating_snap
+          preserve_floating: dashboard_zone_floating_snap
+          reject_with_warning: drop_with_warning
+    guardrails_consumed: [floating_zone_handling]
+    failure_mode: best_effort
+    notes: "Default snaps floating zones onto the grid; reject_with_warning drops them."
+
+  - id: R-DASH-03
+    family: R-DASH
+    name: Container (horizontal / vertical flow)
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §6"
+    omni_target:
+      file_pattern: "dashboard.json"
+      yaml_path: "layout"
+    default_mapping:
+      strategy: dashboard_zone_grid
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-DASH-05
+    family: R-DASH
+    name: Worksheet zone
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §6"
+    omni_target:
+      file_pattern: "dashboard.json"
+      yaml_path: "layout"
+    default_mapping:
+      strategy: tile_passthrough
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-ACTION-01
+    family: R-ACTION
+    name: Filter action
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §6.6"
+    omni_target:
+      file_pattern: "dashboard.json"
+      yaml_path: "actions"
+    default_mapping:
+      strategy: action_filter_native
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-ACTION-02
+    family: R-ACTION
+    name: Highlight action
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §6.6"
+    omni_target:
+      file_pattern: "dashboard.json"
+      yaml_path: "actions"
+    default_mapping:
+      strategy: action_drop
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    notes: ""
+
+  - id: R-ACTION-03
+    family: R-ACTION
+    name: URL action
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §6.6"
+    omni_target:
+      file_pattern: "dashboard.json"
+      yaml_path: "actions"
+    default_mapping:
+      strategy: action_url
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-ACTION-04
+    family: R-ACTION
+    name: Navigation action
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §6.6"
+    omni_target:
+      file_pattern: "dashboard.json"
+      yaml_path: "actions"
+    default_mapping:
+      strategy: action_navigation
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-ACTION-05
+    family: R-ACTION
+    name: Parameter action
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §6.6"
+    omni_target:
+      file_pattern: "dashboard.json"
+      yaml_path: "actions"
+    default_mapping:
+      strategy: action_filter_native
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-ACTION-06
+    family: R-ACTION
+    name: Set action
+    bucket: RED
+    tableau_source:
+      spec_section: "TWBX §6.6"
+    omni_target:
+      file_pattern: "dashboard.json"
+      yaml_path: "actions"
+    default_mapping:
+      strategy: action_drop
+    guardrails_consumed: []
+    failure_mode: warn_and_drop
+    notes: "Omni has no equivalent of Tableau set actions; drop with warning."
+
+  - id: R-PARAM-01
+    family: R-PARAM
+    name: List parameter
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.10"
+    omni_target:
+      file_pattern: "model.yaml"
+      yaml_path: "parameters.<name>"
+    default_mapping:
+      strategy: omni_control
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-PARAM-02
+    family: R-PARAM
+    name: Range parameter
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3.10"
+    omni_target:
+      file_pattern: "model.yaml"
+      yaml_path: "parameters.<name>"
+    default_mapping:
+      strategy: omni_control
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-PARAM-03
+    family: R-PARAM
+    name: All-values parameter
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §3.10"
+    omni_target:
+      file_pattern: "model.yaml"
+      yaml_path: "parameters.<name>"
+    default_mapping:
+      strategy: omni_control
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-COLOR-01
+    family: R-COLOR
+    name: Categorical palette
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §8.1"
+    omni_target:
+      file_pattern: "theme.yaml"
+      yaml_path: "palettes.<name>"
+    default_mapping:
+      strategy: palette_theme
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-COLOR-02
+    family: R-COLOR
+    name: Sequential / diverging palette
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §8.1"
+    omni_target:
+      file_pattern: "theme.yaml"
+      yaml_path: "palettes.<name>"
+    default_mapping:
+      strategy: vega_lite_escape
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-FILTER-01
+    family: R-FILTER
+    name: Categorical filter
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §5.3"
+    omni_target:
+      file_pattern: "workbook.json"
+      yaml_path: "filters"
+    default_mapping:
+      strategy: omni_filter
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-FILTER-05
+    family: R-FILTER
+    name: Relative date filter
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §9"
+    omni_target:
+      file_pattern: "workbook.json"
+      yaml_path: "filters"
+    default_mapping:
+      strategy: omni_filter
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-FILTER-06
+    family: R-FILTER
+    name: Top N filter
+    bucket: YELLOW
+    tableau_source:
+      spec_section: "TWBX §9"
+    omni_target:
+      file_pattern: "workbook.json"
+      yaml_path: "filters"
+    default_mapping:
+      strategy: omni_filter
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-FORMAT-01
+    family: R-FORMAT
+    name: Format string
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §8.2"
+    omni_target:
+      file_pattern: "views/*.yaml"
+      yaml_path: "fields.<name>.format"
+    default_mapping:
+      strategy: format_string_passthrough
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""
+
+  - id: R-CONN-01
+    family: R-CONN
+    name: Live SQL connection
+    bucket: GREEN
+    tableau_source:
+      spec_section: "TWBX §3"
+    omni_target:
+      file_pattern: "model.yaml"
+      yaml_path: "schemas.<name>"
+    default_mapping:
+      strategy: model_layer_dimension
+    guardrails_consumed: []
+    failure_mode: best_effort
+    notes: ""

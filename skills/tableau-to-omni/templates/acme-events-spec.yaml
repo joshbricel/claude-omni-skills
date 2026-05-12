@@ -1,0 +1,208 @@
+# Acme Events migration spec.
+# Drives `scripts/build_dashboards.py` to import all 4 dashboards from the
+# original Tableau workbook into Omni.
+
+view: vw_events_wide
+topic: acme_events
+
+dashboards:
+
+  - slug: events-overview
+    name: "Events overview (migrated from Tableau)"
+    description: "Migrated from Tableau workbook 'Events Dashboard.twbx'. Source: Events overview dashboard."
+    cross_filter: true
+    filters:
+      - field: vw_events_wide.geo_name
+      - field: vw_events_wide.territory_name
+      - field: vw_events_wide.category_name
+      - field: vw_events_wide.event_type
+    tiles:
+      - name: "Events by Geo"
+        kind: kpi_strip
+        dimension: vw_events_wide.geo_name
+        measures: [vw_events_wide.events_to_date]
+        sort_by: vw_events_wide.events_to_date
+        sort_order: descending
+        layout: { x: 0, y: 0, w: 12, h: 6 }
+      - name: "Events by Category"
+        kind: bar
+        orientation: horizontal
+        dimension: vw_events_wide.category_name
+        measures: [vw_events_wide.events]
+        sort_by: vw_events_wide.events
+        sort_order: descending
+        layout: { x: 0, y: 6, w: 6, h: 14 }
+      - name: "Events by Type"
+        kind: bar
+        orientation: horizontal
+        dimension: vw_events_wide.event_type
+        measures: [vw_events_wide.events]
+        sort_by: vw_events_wide.events
+        sort_order: descending
+        layout: { x: 6, y: 6, w: 6, h: 14 }
+      - name: "Events by Day"
+        kind: line
+        dimension: "vw_events_wide.startdate[date]"
+        measures: [vw_events_wide.events]
+        hero_color: "#dc3545"
+        layout: { x: 0, y: 20, w: 12, h: 12 }
+
+  - slug: new-membership
+    name: "New Membership (migrated from Tableau)"
+    description: "Migrated from Tableau dashboard 'New Membership'. Scope: new acme+ members only."
+    cross_filter: true
+    filters:
+      - field: vw_events_wide.geo_name
+      - field: vw_events_wide.territory_name
+      - field: vw_events_wide.event_type
+      - field: vw_events_wide.category_name
+    tiles:
+      - name: "New Members by Geo"
+        kind: kpi_strip
+        dimension: vw_events_wide.geo_name
+        measures:
+          - vw_events_wide.new_members_unique_attended
+          - vw_events_wide.new_members_unique_registered
+        sort_by: vw_events_wide.new_members_unique_registered
+        sort_order: descending
+        filters:
+          "vw_events_wide.new_account": { is: "Y" }
+        layout: { x: 0, y: 0, w: 12, h: 6 }
+      - name: "New Members Attended by Age"
+        kind: bar
+        orientation: vertical
+        dimension: vw_events_wide.age_bin
+        measures: [vw_events_wide.new_members_unique_attended]
+        color: vw_events_wide.gender
+        sort_by: vw_events_wide.age_bin
+        sort_order: ascending
+        filters:
+          "vw_events_wide.new_account": { is: "Y" }
+          "vw_events_wide.gender": { is: "Female,Male" }
+        layout: { x: 0, y: 6, w: 6, h: 14 }
+      - name: "New Members Attended by Gender"
+        kind: gender_callout
+        dimension: vw_events_wide.gender
+        measure: vw_events_wide.new_members_unique_attended
+        filters:
+          "vw_events_wide.new_account": { is: "Y" }
+          "vw_events_wide.gender": { is: "Female,Male" }
+        layout: { x: 6, y: 6, w: 6, h: 14 }
+      - name: "New Members Registered by Age"
+        kind: bar
+        orientation: vertical
+        dimension: vw_events_wide.age_bin
+        measures: [vw_events_wide.new_members_unique_registered]
+        color: vw_events_wide.gender
+        sort_by: vw_events_wide.age_bin
+        sort_order: ascending
+        filters:
+          "vw_events_wide.new_account": { is: "Y" }
+          "vw_events_wide.gender": { is: "Female,Male" }
+        layout: { x: 0, y: 20, w: 6, h: 14 }
+      - name: "New Members Registered by Gender"
+        kind: gender_callout
+        dimension: vw_events_wide.gender
+        measure: vw_events_wide.new_members_unique_registered
+        filters:
+          "vw_events_wide.new_account": { is: "Y" }
+          "vw_events_wide.gender": { is: "Female,Male" }
+        layout: { x: 6, y: 20, w: 6, h: 14 }
+
+  - slug: membership-breakdown
+    name: "Membership Breakdown (migrated from Tableau)"
+    description: "Migrated from Tableau dashboard 'Membership Breakdown'. Scope: all members."
+    cross_filter: true
+    filters:
+      - field: vw_events_wide.geo_name
+      - field: vw_events_wide.territory_name
+      - field: vw_events_wide.event_type
+      - field: vw_events_wide.category_name
+    tiles:
+      - name: "Members by Geo"
+        kind: kpi_strip
+        dimension: vw_events_wide.geo_name
+        measures:
+          - vw_events_wide.unique_attended
+          - vw_events_wide.unique_members
+        sort_by: vw_events_wide.unique_members
+        sort_order: descending
+        layout: { x: 0, y: 0, w: 12, h: 6 }
+      - name: "Members Attended by Age"
+        kind: bar
+        orientation: vertical
+        dimension: vw_events_wide.age_bin
+        measures: [vw_events_wide.unique_attended]
+        color: vw_events_wide.gender
+        sort_by: vw_events_wide.age_bin
+        sort_order: ascending
+        filters:
+          "vw_events_wide.gender": { is: "Female,Male" }
+        layout: { x: 0, y: 6, w: 6, h: 14 }
+      - name: "Members Attended by Gender"
+        kind: gender_callout
+        dimension: vw_events_wide.gender
+        measure: vw_events_wide.unique_attended
+        filters:
+          "vw_events_wide.gender": { is: "Female,Male" }
+        layout: { x: 6, y: 6, w: 6, h: 14 }
+      - name: "Members Registered by Age"
+        kind: bar
+        orientation: vertical
+        dimension: vw_events_wide.age_bin
+        measures: [vw_events_wide.unique_members]
+        color: vw_events_wide.gender
+        sort_by: vw_events_wide.age_bin
+        sort_order: ascending
+        filters:
+          "vw_events_wide.gender": { is: "Female,Male" }
+        layout: { x: 0, y: 20, w: 6, h: 14 }
+      - name: "Members Registered by Gender"
+        kind: gender_callout
+        dimension: vw_events_wide.gender
+        measure: vw_events_wide.unique_members
+        filters:
+          "vw_events_wide.gender": { is: "Female,Male" }
+        layout: { x: 6, y: 20, w: 6, h: 14 }
+
+  - slug: new-member-categories
+    name: "New Member Categories (migrated from Tableau)"
+    description: "Migrated from Tableau dashboard 'New Member Categories'. Scope: new members + relationship to events per geo + category."
+    cross_filter: true
+    filters:
+      - field: vw_events_wide.geo_name
+      - field: vw_events_wide.territory_name
+      - field: vw_events_wide.city
+      - field: vw_events_wide.category_name
+    tiles:
+      - name: "New Members by Geo"
+        kind: kpi_strip
+        dimension: vw_events_wide.geo_name
+        measures: [vw_events_wide.new_members_unique_registered]
+        sort_by: vw_events_wide.new_members_unique_registered
+        sort_order: descending
+        filters:
+          "vw_events_wide.new_account": { is: "Y" }
+        layout: { x: 0, y: 0, w: 12, h: 6 }
+      - name: "New members per event, by category and geo"
+        kind: scatter
+        x: vw_events_wide.events
+        y: vw_events_wide.new_members_unique_registered
+        column: vw_events_wide.geo_name
+        color: vw_events_wide.category_name
+        filters:
+          "vw_events_wide.new_account": { is: "Y" }
+        layout: { x: 0, y: 6, w: 12, h: 14 }
+      - name: "What category are new members coming from"
+        kind: bar
+        orientation: horizontal
+        dimension: vw_events_wide.category_name
+        measures:
+          - vw_events_wide.events
+          - vw_events_wide.new_members_unique_registered
+        column: vw_events_wide.geo_name
+        sort_by: vw_events_wide.category_name
+        sort_order: ascending
+        filters:
+          "vw_events_wide.new_account": { is: "Y" }
+        layout: { x: 0, y: 20, w: 12, h: 16 }
